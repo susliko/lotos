@@ -10,14 +10,13 @@ scalaVersion := "2.13.1"
 lazy val setMinorVersion = minorVersion := {
   CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, v)) => v.toInt
-    case _ => 0
+    case _            => 0
   }
 }
 
 lazy val setModuleName = moduleName := {
   s"lotos-${(publishName or name).value}"
 }
-
 
 val macros = Keys.libraryDependencies ++= {
   minorVersion.value match {
@@ -30,24 +29,32 @@ val macros = Keys.libraryDependencies ++= {
   }
 }
 
+lazy val internal = project
+  .in(file("internal"))
+  .settings(
+    defaultSettings,
+    libraryDependencies ++= Seq(sttp, shapeless, catsCore)
+  )
+
 lazy val lotosMacro = project
   .in(file("macro"))
-  .settings(defaultSettings,
-    defaultSettings,
-    scalacOptions --= Seq(
-      "-Ywarn-unused:params",
-      "-Ywarn-unused:patvars"
-    ),
-    macros,
-  )
+  .dependsOn(internal)
+  .aggregate(internal)
+  .settings(defaultSettings, macros)
+
+lazy val lotosTesting = project
+  .in(file("testing"))
+  .dependsOn(internal, lotosMacro)
+  .aggregate(internal, lotosMacro)
+  .settings(defaultSettings)
 
 lazy val defaultSettings = Seq(
   scalaVersion := "2.13.1",
   setMinorVersion,
   setModuleName,
   defaultScalacOptions,
-  libraryDependencies += compilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.patch),
-  libraryDependencies += compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
+  libraryDependencies += compilerPlugin("org.typelevel" %% "kind-projector"     % "0.11.0" cross CrossVersion.patch),
+  libraryDependencies += compilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
   libraryDependencies ++=
     Seq(
       compilerPlugin("com.github.ghik" % "silencer-plugin" % Version.silencer cross CrossVersion.full),
@@ -80,7 +87,7 @@ lazy val scala213Options = Seq(
 lazy val simulacrumOptions = Seq(
   libraryDependencies ++= Seq(
     scalaOrganization.value % "scala-reflect" % scalaVersion.value % Provided,
-    simulacrum % Provided
+    simulacrum              % Provided
   ),
   pomPostProcess := { node =>
     import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -88,16 +95,15 @@ lazy val simulacrumOptions = Seq(
     new RuleTransformer(new RewriteRule {
       override def transform(node: xml.Node): Seq[xml.Node] = node match {
         case e: xml.Elem
-          if e.label == "dependency" &&
-            e.child.exists(child => child.label == "groupId" && child.text == simulacrum.organization) &&
-            e.child.exists(child => child.label == "artifactId" && child.text.startsWith(s"${simulacrum.name}_")) =>
+            if e.label == "dependency" &&
+              e.child.exists(child => child.label == "groupId" && child.text == simulacrum.organization) &&
+              e.child.exists(child => child.label == "artifactId" && child.text.startsWith(s"${simulacrum.name}_")) =>
           Nil
         case _ => Seq(node)
       }
     }).transform(node).head
   }
 )
-
 
 lazy val defaultScalacOptions = scalacOptions ++= Seq(
   "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -110,14 +116,10 @@ lazy val defaultScalacOptions = scalacOptions ++= Seq(
   "-language:higherKinds", // Allow higher-kinded types
   "-language:implicitConversions", // Allow definition of implicit functions called views
   "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-
-  // Inlining options. More at https://www.lightbend.com/blog/scala-inliner-optimizer, https://github.com/scala/scala/pull/4858, https://github.com/scala/bug/issues/8790
   "-opt:l:method", // Enable intra-method optimizations: unreachable-code,simplify-jumps,compact-locals,copy-propagation,redundant-casts,box-unbox,nullness-tracking,closure-invocations,allow-skip-core-module-init,assume-modules-non-null,allow-skip-class-loading.
   "-opt:l:inline", // Enable cross-method optimizations (note: inlining requires -opt-inline-from): l:method,inline.
   "-opt-inline-from:tofu.**", // Patterns for classfile names from which to allow inlining
   "-opt-warnings:none", // No optimizer warnings.
-
-  //  "-Xcheckinit",                   // Wrap field accessors to throw an exception on uninitialized access. (SHOULD BE USED ONLY IN DEV)
   "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
   "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
   "-Xlint:doc-detached", // A Scaladoc comment appears to be detached from its element.
