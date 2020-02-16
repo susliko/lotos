@@ -33,7 +33,7 @@ lazy val internal = project
   .in(file("internal"))
   .settings(
     defaultSettings,
-    libraryDependencies ++= Seq(sttp, shapeless, catsCore)
+    libraryDependencies ++= Seq(shapeless, catsCore, catsEffect)
   )
 
 lazy val lotosMacro = project
@@ -78,7 +78,8 @@ lazy val scala213Options = Seq(
           "-Ywarn-value-discard", // Warn when non-Unit expression results are unused.
           "-Xlint:unsound-match", // Pattern match may not be typesafe.
           "-Xlint:by-name-right-associative", // By-name parameter of right associative operator.
-          "-Xfuture" // Turn on future language features.
+          "-Xfuture", // Turn on future language features.
+          "-Ymacro-debug-verbose",
         )
     }
   }
