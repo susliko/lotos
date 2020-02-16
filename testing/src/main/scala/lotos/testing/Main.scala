@@ -1,23 +1,23 @@
 package lotos.testing
 
-import lotos.internal.Gen
-import lotos.testing.syntax.{method, specFor}
-import syntax._
-import lotos.internal.Invoker
+import lotos.testing.syntax.{method, spec}
 import cats.effect.{ExitCode, IO, IOApp}
+import lotos.internal.model.{Gen, TestedImpl}
 
+/*_*/
 object Main extends IOApp {
 
-  val spec = specFor(new Stack[Int]).methods(
-    method("push").paramGen("elem", Gen.intGen),
-    method("pop").throws[RuntimeException]
-  )
+  val stackSpec =
+    spec(new Stack[Int])
+      .withMethod(method("push").paramGen("elem", Gen.intGen))
+      .withMethod(method("pop").throws[RuntimeException])
 
-  val inv: Invoker[IO] = LotosTest.invoker[IO](spec)
+  //  println(method("pop").throws[RuntimeException].name)
 
+  val inv: TestedImpl[IO] = LotosTest[IO].forSpec(stackSpec)
   override def run(args: List[String]): IO[ExitCode] =
     for {
       res <- inv.invoke("peka")
-      _ = println(res)
+      _   = println(res)
     } yield ExitCode.Success
 }

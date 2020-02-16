@@ -1,12 +1,15 @@
 package lotos.testing
 
-import lotos.internal.{Invoker, SpecT}
-import lotos.macros.InvokerConstructor
+import cats.MonadError
+import lotos.internal.model.{SpecT, TestedImpl}
+import lotos.macros.TestedImplConstructor
+import shapeless.HList
 
 object LotosTest {
-  def invoker[F[_]] = new Applier[F]
+  def apply[F[_]: MonadError[*[_], Throwable]] = new Applier[F]
 
-  class Applier[F[_]] {
-    def apply[Impl](spec: SpecT[Impl]): Invoker[F] = macro InvokerConstructor.construct[F, Impl]
+  class Applier[F[_]: MonadError[*[_], Throwable]] {
+    def forSpec[Impl, Methods <: HList](spec: SpecT[Impl, Methods]): TestedImpl[F] =
+      macro TestedImplConstructor.construct[F, Impl, Methods]
   }
 }

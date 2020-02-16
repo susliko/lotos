@@ -1,4 +1,4 @@
-package lotos.internal
+package lotos.internal.model
 
 trait Gen[T] {
   def gen: T
