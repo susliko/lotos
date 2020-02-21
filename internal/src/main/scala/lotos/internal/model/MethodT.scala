@@ -4,12 +4,20 @@ import shapeless.labelled.FieldType
 import shapeless.{::, HList, Witness}
 
 class MethodT[Name, Params <: HList, Errors <: HList](
-    val name: String,
-    val paramGens: Map[String, AnyRef]
+    protected val name: String,
+    protected val paramGens: Map[String, AnyRef]
 ) {
   def paramGen[key <: String, T](w: Witness.Aux[key], gen: Gen[T]): MethodT[Name, FieldType[key, T] :: Params, Errors] =
     new MethodT(name = this.name, paramGens = this.paramGens + (w.value.toString -> gen))
 
   def throws[E <: Throwable]: MethodT[Name, Params, E :: Errors] =
     new MethodT(name = this.name, paramGens = this.paramGens)
+}
+
+object MethodT {
+  def name[Name, Params <: HList, Errors <: HList](methodT: MethodT[Name, Params, Errors]): String =
+    methodT.name
+
+  def paramGens[Name, Params <: HList, Errors <: HList](methodT: MethodT[Name, Params, Errors]): Map[String, AnyRef] =
+    methodT.paramGens
 }

@@ -8,5 +8,5 @@ package object syntax {
     new MethodT(name = name.value, paramGens = Map.empty)
 
   def spec[I](construct: => I): SpecT[I, HNil] =
-    new SpecT(construct = () => construct, methods = HNil)
+    new SpecT(construct = () => construct, methods = Map.empty)
 }

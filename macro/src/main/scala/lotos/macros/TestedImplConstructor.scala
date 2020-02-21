@@ -21,32 +21,66 @@ class TestedImplConstructor(val c: blackbox.Context) extends ShapelessMacros {
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
 
     val implT = weakTypeOf[Impl]
+    println(implT.decls)
     val specT = weakTypeOf[Methods]
 
     val implMethods = extractMethods(implT).toMap
-    val specMethods = hlistElements(specT).collect {
+    val specMethods: List[(String, NList[Type])] = hlistElements(specT).collect {
       case method if method.typeConstructor == methodT =>
         method.typeArgs match {
           case List(name, params, _) => (unpackString(name), extractRecord(params))
-          case _                          => abort(s"unexpected method definition $method")
+          case _                     => abort(s"unexpected method definition $method")
         }
     }
-    println(specMethods)
+    val methodTypeParams: Map[String, List[Type]] = hlistElements(specT).collect {
+      case method if method.typeConstructor == methodT =>
+        method.typeArgs match {
+          case List(name, params, errors) => (unpackString(name), List(name, params, errors))
+          case _                          => abort(s"unexpected method definition $method")
+        }
+    }.toMap
+
     println(implMethods)
     checkSpecOrAbort(specMethods, implMethods)
 
-    val checkedTree = typeCheckOrAbort(
-      q"""
+    val methodMatch = specMethods.map {
+      case (mName, params) =>
+        val paramList = params.map {
+          case (pName, tpe) =>
+            q"""${TermName(pName)} = paramGens(${q"$pName"}).asInstanceOf[Gen[$tpe]].gen"""
+        }
+        println(paramList)
+        val invocation =
+          if (paramList.isEmpty)
+            q"Sync[$FT].delay(impl.${TermName(mName)}.toString)"
+          else
+            q"Sync[$FT].delay(impl.${TermName(mName)}(..$paramList).toString)"
+        cq"""${q"$mName"} =>
+            val methodT =
+                SpecT.methods($spec)(method)
+                     .asInstanceOf[MethodT[..${methodTypeParams(mName)}]]
+            val paramGens = MethodT.paramGens(methodT)
+            $invocation"""
+    } :+ cq"""_ => Monad[$FT].pure("Unknown method") """
+
+    println(methodMatch)
+    val checkedTree = typeCheckOrAbort(q"""
+    import lotos.internal.model.{SpecT, MethodT, Gen}
+    import cats.effect.Sync
+    import cats.Monad
+
     new TestedImpl[$FT] {
-      val impl = $spec.construct()
+      val impl = SpecT.construct($spec)
 
       def copy: TestedImpl[$FT] = this
       def invoke(method: String): ${appliedType(FT, typeOf[String])} = {
-
-        cats.Monad[$FT].pure(method)
+        method match {
+            case ..$methodMatch
+        }
       }
     }
      """)
+    println(checkedTree)
     c.Expr(checkedTree)
   }
 
@@ -82,11 +116,11 @@ class TestedImplConstructor(val c: blackbox.Context) extends ShapelessMacros {
     tpe.decls.collect {
       case s: MethodSymbol =>
         symbolName(s) ->
-          (s.paramLists.map(lst => lst.map(p => symbolName(p) -> p.typeSignature)) -> s.returnType)
+          (s.infoIn(tpe)
+            .paramLists
+            .map(lst => lst.map(p => symbolName(p) -> p.typeSignature)) ->
+            s.infoIn(tpe).resultType)
     }.toList
-
-  def extractMethod(meth: MethodSymbol): MethodDecl[Type] =
-    meth.paramLists.map(lst => lst.map(p => symbolName(p) -> p.typeSignature)) -> meth.returnType
 
   def extractMeth(typ: Type, name: Name): Option[MethodSymbol] =
     typ.decl(name) match {
