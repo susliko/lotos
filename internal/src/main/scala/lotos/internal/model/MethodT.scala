@@ -7,7 +7,8 @@ class MethodT[Name, Params <: HList, Errors <: HList](
     protected val name: String,
     protected val paramGens: Map[String, AnyRef]
 ) {
-  def paramGen[key <: String, T](w: Witness.Aux[key], gen: Gen[T]): MethodT[Name, FieldType[key, T] :: Params, Errors] =
+  def param[key <: String, T](w: Witness.Aux[key])(
+      implicit gen: Gen[T]): MethodT[Name, FieldType[key, T] :: Params, Errors] =
     new MethodT(name = this.name, paramGens = this.paramGens + (w.value.toString -> gen))
 
   def throws[E <: Throwable]: MethodT[Name, Params, E :: Errors] =

@@ -1,27 +1,33 @@
 package lotos.macros
 
+import cats.effect.Sync
 import cats.instances.list._
 import cats.instances.either._
 import cats.syntax.traverse._
-
-import lotos.internal.model.{MethodT, SpecT, TestedImpl}
+import lotos.internal.model.{FuncCall, FuncResp, Invoker, MethodT, SpecT}
 import shapeless.{HList, HNil}
 
 import scala.reflect.NameTransformer
 import scala.reflect.macros.blackbox
 
-class TestedImplConstructor(val c: blackbox.Context) extends ShapelessMacros {
+class InvokerConstructor(val c: blackbox.Context) extends ShapelessMacros {
   import c.universe._
 
   type WTTF[F[_]] = WeakTypeTag[F[Unit]]
 
   def construct[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
-      spec: c.Expr[SpecT[Impl, Methods]]): c.Expr[TestedImpl[F]] = {
+      spec: c.Expr[SpecT[Impl, Methods]]): c.Expr[Invoker[F]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
 
+    val syncF = inferImplicitOrAbort(
+      appliedType(
+        weakTypeOf[Sync[F]].typeConstructor,
+        FT
+      )
+    )
+
     val implT = weakTypeOf[Impl]
-    println(implT.decls)
     val specT = weakTypeOf[Methods]
 
     val implMethods = extractMethods(implT).toMap
@@ -40,44 +46,56 @@ class TestedImplConstructor(val c: blackbox.Context) extends ShapelessMacros {
         }
     }.toMap
 
-    println(implMethods)
     checkSpecOrAbort(specMethods, implMethods)
 
     val methodMatch = specMethods.map {
       case (mName, params) =>
         val paramList = params.map {
           case (pName, tpe) =>
-            q"""${TermName(pName)} = paramGens(${q"$pName"}).asInstanceOf[Gen[$tpe]].gen"""
+            q"""{
+               val paramGen = paramGens($pName).asInstanceOf[Gen[$tpe]]
+               val param = paramGen.gen(seeds($pName))
+               showParams = showParams + ($pName -> paramGen.show(param))
+               param
+             }"""
         }
-        println(paramList)
         val invocation =
           if (paramList.isEmpty)
-            q"Sync[$FT].delay(impl.${TermName(mName)}.toString)"
+            q"$syncF.delay(impl.${TermName(mName)}.toString)"
           else
-            q"Sync[$FT].delay(impl.${TermName(mName)}(..$paramList).toString)"
+            q"$syncF.delay(impl.${TermName(mName)}(..$paramList).toString)"
         cq"""${q"$mName"} =>
+            val seeds: Map[String, Long] = Map(..${params.map { case (pName, _) => q"$pName -> random.nextLong()" }})
+            var showParams: Map[String, String] = Map.empty
             val methodT =
                 SpecT.methods($spec)(method)
                      .asInstanceOf[MethodT[..${methodTypeParams(mName)}]]
             val paramGens = MethodT.paramGens(methodT)
-            $invocation"""
-    } :+ cq"""_ => Monad[$FT].pure("Unknown method") """
+            $invocation.map { res =>
+              (FuncCall(${q"$mName"},
+                        seeds,
+                        showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", ")),
+               FuncResp(${q"$mName"},
+                        res.toString))
+            }
+          """
+    } :+ cq"""_ => $syncF.pure((FuncCall("Unknown method", Map.empty, ""), FuncResp("Unknown method", ""))) """
 
-    println(methodMatch)
     val checkedTree = typeCheckOrAbort(q"""
-    import lotos.internal.model.{SpecT, MethodT, Gen}
-    import cats.effect.Sync
-    import cats.Monad
+    import lotos.internal.model._
+    import scala.util.Random
 
-    new TestedImpl[$FT] {
-      val impl = SpecT.construct($spec)
+    new Invoker[$FT] {
+      private val random = new Random(System.currentTimeMillis())
+      private val impl = SpecT.construct($spec)
 
-      def copy: TestedImpl[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[String])} = {
+      def copy: Invoker[$FT] = this
+      def invoke(method: String): ${appliedType(FT, typeOf[(FuncCall, FuncResp)])} = {
         method match {
             case ..$methodMatch
         }
       }
+      def methods: List[String] = ${specMethods.map(_._1)}
     }
      """)
     println(checkedTree)
