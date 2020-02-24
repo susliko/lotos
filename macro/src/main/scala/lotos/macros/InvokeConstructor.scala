@@ -1,22 +1,23 @@
 package lotos.macros
 
 import cats.effect.Sync
-import cats.instances.list._
 import cats.instances.either._
+import cats.instances.list._
 import cats.syntax.traverse._
-import lotos.internal.model.{FuncCall, FuncResp, Invoker, MethodT, SpecT}
+import lotos.internal.model.{LogEvent, MethodT, SpecT}
+import lotos.internal.testing.Invoke
 import shapeless.{HList, HNil}
 
 import scala.reflect.NameTransformer
 import scala.reflect.macros.blackbox
 
-class InvokerConstructor(val c: blackbox.Context) extends ShapelessMacros {
+class InvokeConstructor(val c: blackbox.Context) extends ShapelessMacros {
   import c.universe._
 
   type WTTF[F[_]] = WeakTypeTag[F[Unit]]
 
   def construct[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
-      spec: c.Expr[SpecT[Impl, Methods]]): c.Expr[Invoker[F]] = {
+      spec: c.Expr[SpecT[Impl, Methods]]): c.Expr[Invoke[F]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
 
@@ -72,25 +73,27 @@ class InvokerConstructor(val c: blackbox.Context) extends ShapelessMacros {
                      .asInstanceOf[MethodT[..${methodTypeParams(mName)}]]
             val paramGens = MethodT.paramGens(methodT)
             $invocation.map { res =>
-              (FuncCall(${q"$mName"},
+              List(
+               FuncInvocation(${q"$mName"},
                         seeds,
-                        showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", ")),
-               FuncResp(${q"$mName"},
+                        showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", "),
                         res.toString))
             }
           """
-    } :+ cq"""_ => $syncF.pure((FuncCall("Unknown method", Map.empty, ""), FuncResp("Unknown method", ""))) """
+    } :+ cq"""_ => $syncF.pure(List(FuncCall("Unknown method", Map.empty, ""))) """
 
     val checkedTree = typeCheckOrAbort(q"""
     import lotos.internal.model._
+
+    import lotos.internal.testing._
     import scala.util.Random
 
-    new Invoker[$FT] {
+    new Invoke[$FT] {
       private val random = new Random(System.currentTimeMillis())
       private val impl = SpecT.construct($spec)
 
-      def copy: Invoker[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[(FuncCall, FuncResp)])} = {
+      def copy: Invoke[$FT] = this
+      def invoke(method: String): ${appliedType(FT, typeOf[List[LogEvent]])} = {
         method match {
             case ..$methodMatch
         }
@@ -98,7 +101,6 @@ class InvokerConstructor(val c: blackbox.Context) extends ShapelessMacros {
       def methods: List[String] = ${specMethods.map(_._1)}
     }
      """)
-    println(checkedTree)
     c.Expr(checkedTree)
   }
 
