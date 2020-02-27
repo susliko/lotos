@@ -10,6 +10,7 @@ trait ShapelessMacros extends ReprTypes with MacroUtils with SymbolMacros {
   import c.universe._
 
   def unfoldCompoundTpe(compoundTpe: Type, nil: Type, cons: Type): List[Type] = {
+    println(compoundTpe)
     @tailrec
     def loop(tpe: Type, acc: List[Type]): List[Type] =
       tpe.dealias match {
