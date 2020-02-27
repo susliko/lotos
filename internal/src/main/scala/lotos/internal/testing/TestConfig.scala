@@ -1,3 +1,3 @@
-package lotos.testing
+package lotos.internal.testing
 
 case class TestConfig(parallelism: Int, length: Int)
