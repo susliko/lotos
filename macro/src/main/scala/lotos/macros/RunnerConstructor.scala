@@ -1,6 +1,6 @@
 package lotos.macros
 
-import cats.effect.Sync
+import cats.effect.{ContextShift, Sync}
 import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.traverse._
@@ -18,7 +18,7 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
   def construct[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
-      cfg: c.Expr[TestConfig]): c.Expr[F[Unit]] = {
+      cfg: c.Expr[TestConfig])(cs: c.Expr[ContextShift[F]]): c.Expr[F[Unit]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
 
@@ -101,7 +101,7 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
       }
       def methods: List[String] = ${specMethods.map(_._1)}
     }
-    LotosTest.run($cfg, invoke)
+    LotosTest.run($cfg, invoke)($cs)
      """)
     c.Expr(checkedTree)
   }

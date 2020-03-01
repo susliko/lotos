@@ -19,6 +19,9 @@ case class TestRunImpl[F[_]: Concurrent: Parallel](invoke: Invoke[F])(cs: Contex
               freshInvoke = inv.copy
               inv
             })
-      logs <- scenario.actions.parTraverse(act => cs.shift *> act.flatTraverse(method => inv.invoke(method)))
+      logs <- scenario.actions.parTraverse(
+               act =>
+                 cs.shift *> act
+                   .flatTraverse(method => inv.invoke(method)))
     } yield logs
 }
