@@ -23,6 +23,7 @@ object Main extends IOApp {
       .make(IO(Executors.newFixedThreadPool(parallelism)))(ex => IO(ex.shutdown()))
       .map(ex => IO.contextShift(ExecutionContext.fromExecutor(ex)))
 
+
   override def run(args: List[String]): IO[ExitCode] =
     for {
       _ <- mkContextShift(cfg.parallelism).use(cs => LotosTest[IO].forSpec(stackSpec, cfg)(cs))
