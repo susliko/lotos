@@ -74,14 +74,13 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
                      .asInstanceOf[MethodT[..${methodTypeParams(mName)}]]
             val paramGens = MethodT.paramGens(methodT)
             $invocation.map { res =>
-              List(
                FuncInvocation(${q"$mName"},
                         seeds,
                         showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", "),
-                        res.toString))
+                        res.toString)
             }
           """
-    } :+ cq"""_ => $syncF.pure(List(FuncCall("Unknown method", Map.empty, ""))) """
+    } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "")) """
 
     val checkedTree = typeCheckOrAbort(q"""
     import lotos.internal.model._
@@ -94,7 +93,7 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
       private val impl = SpecT.construct($spec)
 
       def copy: Invoke[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[List[LogEvent]])} = {
+      def invoke(method: String): ${appliedType(FT, typeOf[LogEvent])} = {
         method match {
             case ..$methodMatch
         }

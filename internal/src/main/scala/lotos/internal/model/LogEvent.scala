@@ -1,19 +1,20 @@
 package lotos.internal.model
 
 trait LogEvent {
+  def methodName: String
   def show: String
 }
 
-case class FuncCall(method: String, paramSeeds: Map[String, Long], showParams: String) extends LogEvent {
-  def show: String = s"$method($showParams)"
+case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParams: String) extends LogEvent {
+  def show: String = s"$methodName($showParams)"
 }
 
-case class FuncResp(method: String, showResult: String) extends LogEvent {
-  def show: String = s"$method: $showResult"
+case class FuncResp(methodName: String, showResult: String) extends LogEvent {
+  def show: String = s"$methodName: $showResult"
 }
-case class FuncInvocation(method: String, paramSeeds: Map[String, Long], showParams: String, showResult: String)
+case class FuncInvocation(methodName: String, paramSeeds: Map[String, Long], showParams: String, showResult: String)
     extends LogEvent {
-  def show: String = s"$method($showParams): $showResult"
+  def show: String = s"$methodName($showParams): $showResult"
 }
 
 object PrintLogs {
