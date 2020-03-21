@@ -3,6 +3,7 @@ package lotos.internal.model
 trait LogEvent {
   def methodName: String
   def show: String
+  def paramSeeds: Map[String, Long] 
 }
 
 case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParams: String) extends LogEvent {
@@ -11,6 +12,7 @@ case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParam
 
 case class FuncResp(methodName: String, showResult: String) extends LogEvent {
   def show: String = s"$methodName: $showResult"
+  def paramSeeds: Map[String,Long] = Map.empty
 }
 case class FuncInvocation(methodName: String, paramSeeds: Map[String, Long], showParams: String, showResult: String)
     extends LogEvent {

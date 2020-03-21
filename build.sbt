@@ -59,7 +59,8 @@ lazy val defaultSettings = Seq(
     Seq(
       compilerPlugin("com.github.ghik" % "silencer-plugin" % Version.silencer cross CrossVersion.full),
       "com.github.ghik" % "silencer-lib" % Version.silencer % Provided cross CrossVersion.full
-    )
+    ),
+  libraryDependencies += scalatest
 ) ++ scala213Options ++ simulacrumOptions
 
 lazy val scala213Options = Seq(

@@ -8,15 +8,19 @@ import lotos.internal.testing.TestConfig
 import lotos.testing.syntax.{method, spec}
 
 import scala.concurrent.ExecutionContext
+import lotos.internal.testing.lts
+import lotos.internal.model.LogEvent
+import lotos.internal.model.FuncCall
 
 /*_*/
 object Main extends IOApp {
+
   val stackSpec =
     spec(new Stack[Int])
       .withMethod(method("push").param("elem")(Gen.intGen))
       .withMethod(method("pop").throws[RuntimeException])
 
-  val cfg = TestConfig(parallelism = 2, length = 10)
+  val cfg = TestConfig(parallelism = 3, length = 10)
 
   def mkContextShift(parallelism: Int): Resource[IO, ContextShift[IO]] =
     Resource

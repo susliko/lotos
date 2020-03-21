@@ -18,7 +18,8 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
   def construct[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
-      cfg: c.Expr[TestConfig])(cs: c.Expr[ContextShift[F]]): c.Expr[F[Unit]] = {
+      cfg: c.Expr[TestConfig]
+  )(cs: c.Expr[ContextShift[F]]): c.Expr[F[Unit]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
 
@@ -50,24 +51,28 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
     checkSpecOrAbort(specMethods, implMethods)
 
-    val methodMatch = specMethods.map {
-      case (mName, params) =>
-        val paramList = params.map {
-          case (pName, tpe) =>
-            q"""{
+    def methodMatch(withSeeds: Boolean) =
+      specMethods.map {
+        case (mName, params) =>
+          val paramList = params.map {
+            case (pName, tpe) =>
+              q"""{
                val paramGen = paramGens($pName).asInstanceOf[Gen[$tpe]]
                val param = paramGen.gen(seeds($pName))
                showParams = showParams + ($pName -> paramGen.show(param))
                param
              }"""
-        }
-        val invocation =
-          if (paramList.isEmpty)
-            q"$syncF.delay(impl.${TermName(mName)}.toString)"
-          else
-            q"$syncF.delay(impl.${TermName(mName)}(..$paramList).toString)"
-        cq"""${q"$mName"} =>
-            val seeds: Map[String, Long] = Map(..${params.map { case (pName, _) => q"$pName -> random.nextLong()" }})
+          }
+          val invocation =
+            if (paramList.isEmpty)
+              q"$syncF.delay(impl.${TermName(mName)}.toString)"
+            else
+              q"$syncF.delay(impl.${TermName(mName)}(..$paramList).toString)"
+          val seeds =
+            if (withSeeds) q""
+            else q"""val seeds: Map[String, Long] = Map(..${params.map { case (pName, _) => q"$pName -> random.nextLong()" }})"""
+          cq"""${q"$mName"} =>
+            $seeds
             var showParams: Map[String, String] = Map.empty
             val methodT =
                 SpecT.methods($spec)(method)
@@ -80,9 +85,9 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
                         res.toString)
             }
           """
-    } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "")) """
+      } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "")) """
 
-    val checkedTree = typeCheckOrAbort(q"""
+    val invokeTree = q"""
     import lotos.internal.model._
 
     import lotos.internal.testing._
@@ -93,20 +98,26 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
       private val impl = SpecT.construct($spec)
 
       def copy: Invoke[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[LogEvent])} = {
+      def invoke(method: String): ${appliedType(FT, typeOf[LogEvent])} = 
         method match {
-            case ..$methodMatch
+            case ..${methodMatch(withSeeds = false)}
         }
-      }
+      def seedsInvoke(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[LogEvent])} = 
+        method match {
+          case ..${methodMatch(withSeeds = true)}
+        }
       def methods: List[String] = ${specMethods.map(_._1)}
     }
     LotosTest.run($cfg, invoke)($cs)
-     """)
+     """
+    val checkedTree = typeCheckOrAbort(invokeTree)
     c.Expr(checkedTree)
   }
 
-  def checkSpecOrAbort(specMethods: List[(String, List[(String, Type)])],
-                       implMethods: Map[String, MethodDecl[Type]]): Unit = {
+  def checkSpecOrAbort(
+      specMethods: List[(String, List[(String, Type)])],
+      implMethods: Map[String, MethodDecl[Type]]
+  ): Unit = {
     specMethods.foreach {
       case (name, args) =>
         val specArgsMap = args.toMap
@@ -120,11 +131,12 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
                     specArgType <- specArgsMap
                                     .get(implArgName)
                                     .toRight(
-                                      s"argument `$implArgName` of method `$name` does not exist in the specification")
+                                      s"argument `$implArgName` of method `$name` does not exist in the specification"
+                                    )
                     _ <- Either.cond(
                           specArgType =:= implArgType,
                           (),
-                          s"argument `$implArgName` of method `$name` is declared to be `$specArgType` but `$implArgType` encountered in implementation",
+                          s"argument `$implArgName` of method `$name` is declared to be `$specArgType` but `$implArgType` encountered in implementation"
                         )
                   } yield (implArgName, implArgType)
               }

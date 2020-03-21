@@ -9,7 +9,7 @@ object Gen extends GenPrimitiveInstances
 
 trait GenPrimitiveInstances {
   implicit val intGen: Gen[Int] = new Gen[Int] {
-    def gen(seed: Long): Int = (seed % 10).toInt
+    def gen(seed: Long): Int = (seed % 100).toInt
 
     def show(t: Int): String = t.toString
   }
