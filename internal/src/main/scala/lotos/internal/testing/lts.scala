@@ -3,10 +3,9 @@ package lotos.internal.testing
 import cats.Functor
 import cats.effect.Sync
 import lotos.internal.model.LogEvent
-import lotos.internal.deepcopy.deepCopy
+import lotos.internal.deepcopy._
 import cats.implicits._
 
-import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 
 sealed trait TestResult
@@ -27,7 +26,7 @@ object LTS {
           .map {
             case ((threadId, order), candidateId) =>
               for {
-                specCopy    <- Sync[F].delay(deepCopy(spec)).rethrow
+                specCopy    <- deepCopyF(spec)
                 moveForward <- validate(specCopy, history(threadId)(order))
                 result <- if (moveForward) {
                            val newCandidates =
