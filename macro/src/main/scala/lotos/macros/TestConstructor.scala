@@ -1,25 +1,57 @@
 package lotos.macros
 
-import cats.effect.{ContextShift, Sync}
+import cats.effect.{ContextShift, IO, Sync}
 import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.traverse._
 import lotos.internal.model._
-import lotos.internal.testing.TestConfig
+import lotos.internal.testing.{Invoke, TestConfig}
+import lotos.internal.model.TestResult
 import shapeless.{HList, HNil}
 
 import scala.reflect.NameTransformer
 import scala.reflect.macros.blackbox
 
-class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
+class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
   import c.universe._
 
   type WTTF[F[_]] = WeakTypeTag[F[Unit]]
 
-  def construct[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
+  def constructF[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
       cfg: c.Expr[TestConfig]
-  )(cs: c.Expr[ContextShift[F]]): c.Expr[F[Unit]] = {
+  )(cs: c.Expr[ContextShift[F]]): c.Expr[F[TestResult]] = {
+    val invoke = constructInvoke[F, Impl, Methods](spec)
+
+    val testRunTree = q"lotos.testing.LotosTest.run($cfg, $invoke)($cs)"
+    val checkedTree = typeCheckOrAbort(testRunTree)
+    c.Expr(checkedTree)
+  }
+
+  def constructIO[Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
+      spec: c.Expr[SpecT[Impl, Methods]],
+      cfg: c.Expr[TestConfig]
+  ): c.Expr[IO[TestResult]] = {
+    val invoke = constructInvoke[IO, Impl, Methods](spec)
+
+    val testRunTree = q"""
+      import cats.effect.{ContextShift, Resource}
+      import scala.concurrent.ExecutionContext
+      import java.util.concurrent.Executors
+      
+      val csResource = Resource
+       .make(IO(Executors.newFixedThreadPool($cfg.parallelism)))(ex => IO(ex.shutdown()))
+       .map(ex => IO.contextShift(ExecutionContext.fromExecutor(ex)))
+       
+      csResource.use(cs => lotos.testing.LotosTest.run($cfg, $invoke)(cs))
+      """
+    val checkedTree = typeCheckOrAbort(testRunTree)
+    c.Expr(checkedTree)
+  }
+
+  private def constructInvoke[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
+      spec: c.Expr[SpecT[Impl, Methods]],
+  ): c.Expr[Invoke[F]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
 
@@ -53,10 +85,11 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
     def methodMatch(withSeeds: Boolean) =
       specMethods.map {
-        case (mName, params) =>
+        case (mName, reversedParams) =>
+          val params = reversedParams.reverse
           val paramList = params.map {
             case (pName, tpe) =>
-              q"""{
+              q"""${TermName(pName)} = {
                val paramGen = paramGens($pName).asInstanceOf[Gen[$tpe]]
                val param = paramGen.gen(seeds($pName))
                showParams = showParams + ($pName -> paramGen.show(param))
@@ -70,7 +103,10 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
               q"$syncF.delay(impl.${TermName(mName)}(..$paramList).toString)"
           val seeds =
             if (withSeeds) q""
-            else q"""val seeds: Map[String, Long] = Map(..${params.map { case (pName, _) => q"$pName -> random.nextLong()" }})"""
+            else
+              q"""val seeds: Map[String, Long] = Map(..${params.map {
+                case (pName, _) => q"$pName -> random.nextLong()"
+              }})"""
           cq"""${q"$mName"} =>
             $seeds
             var showParams: Map[String, String] = Map.empty
@@ -87,13 +123,13 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
           """
       } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "")) """
 
-    val invokeTree = q"""
+    val invokeTree  = q"""
     import lotos.internal.model._
 
     import lotos.internal.testing._
     import scala.util.Random
 
-    val invoke = new Invoke[$FT] {
+    new Invoke[$FT] {
       private val random = new Random(System.currentTimeMillis())
       private val impl = SpecT.construct($spec)
 
@@ -108,13 +144,12 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
         }
       def methods: List[String] = ${specMethods.map(_._1)}
     }
-    LotosTest.run($cfg, invoke)($cs)
      """
     val checkedTree = typeCheckOrAbort(invokeTree)
     c.Expr(checkedTree)
   }
 
-  def checkSpecOrAbort(
+  private def checkSpecOrAbort(
       specMethods: List[(String, List[(String, Type)])],
       implMethods: Map[String, MethodDecl[Type]]
   ): Unit = {
@@ -145,7 +180,7 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
     }
   }
 
-  def extractMethods(tpe: Type): NList[MethodDecl[Type]] =
+  private def extractMethods(tpe: Type): NList[MethodDecl[Type]] =
     tpe.decls.collect {
       case s: MethodSymbol =>
         symbolName(s) ->
@@ -155,7 +190,7 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
             s.infoIn(tpe).resultType)
     }.toList
 
-  def extractMeth(typ: Type, name: Name): Option[MethodSymbol] =
+  private def extractMeth(typ: Type, name: Name): Option[MethodSymbol] =
     typ.decl(name) match {
       case ms: MethodSymbol                 => Some(ms)
       case ov if ov.alternatives.length > 1 => abort("could not handle method overloading")
@@ -172,7 +207,7 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
           }
     }
 
-  def findMeth(typ: Type, group: Vector[String], name: Name): Option[MethodSymbol] =
+  private def findMeth(typ: Type, group: Vector[String], name: Name): Option[MethodSymbol] =
     group match {
       case first +: rest =>
         typ.decl(TermName(first)) match {
@@ -184,12 +219,12 @@ class RunnerConstructor(val c: blackbox.Context) extends ShapelessMacros {
       case Vector() => extractMeth(typ, name)
     }
 
-  def unpackString(sType: Type): String =
+  private def unpackString(sType: Type): String =
     sType match {
       case ConstantType(Constant(s: String)) => NameTransformer.encode(s)
       case x                                 => abort(s"$x should be a string constant")
     }
 
-  def symbolName(symbol: Symbol) = symbol.name.decodedName.toString
+  private def symbolName(symbol: Symbol) = symbol.name.decodedName.toString
 
 }

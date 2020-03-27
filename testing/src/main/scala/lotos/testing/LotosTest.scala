@@ -1,37 +1,63 @@
 package lotos.testing
 
 import cats.Parallel
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.implicits._
-import lotos.internal.model.{FuncInvocation, PrintLogs, Scenario, SpecT}
-import lotos.internal.testing.{Invoke, TestConfig, TestRunImpl, TestSuccess, lts}
-import lotos.macros.RunnerConstructor
 import lotos.internal.deepcopy._
+import lotos.internal.model.{PrintLogs, Scenario, SpecT, TestFailure, TestResult, TestSuccess}
+import lotos.internal.testing._
+import lotos.macros.TestConstructor
 import shapeless.HList
-import lotos.internal.model.FuncCall
 
 object LotosTest {
-  def apply[F[_]: Concurrent: Parallel]: Runner[F] =
+  def in[F[_]: Concurrent: Parallel]: Runner[F] =
     new Runner[F]
 
+  def forSpec[Impl, Methods <: HList](spec: SpecT[Impl, Methods], cfg: TestConfig): IO[TestResult] =
+    macro TestConstructor.constructIO[Impl, Methods]
+
   class Runner[F[_]: Concurrent: Parallel] {
-    def forSpec[Impl, Methods <: HList](spec: SpecT[Impl, Methods], cfg: TestConfig)(cs: ContextShift[F]): F[Unit] =
-      macro RunnerConstructor.construct[F, Impl, Methods]
+    def forSpec[Impl, Methods <: HList](spec: SpecT[Impl, Methods], cfg: TestConfig)(
+        cs: ContextShift[F]): F[TestResult] =
+      macro TestConstructor.constructF[F, Impl, Methods]
   }
 
+  def run[F[_]: Concurrent: Parallel](cfg: TestConfig, invoke: Invoke[F])(cs: ContextShift[F]): F[TestResult] = {
+    val testRun = TestRunImpl(invoke)(cs)
+    val scenarios: List[Scenario] =
+      List.fill(cfg.scenarioCount)(Scenario.gen(invoke.methods, cfg.parallelism, cfg.scenarioLength))
 
-  def run[F[_]: Concurrent: Parallel](cfg: TestConfig, invoke: Invoke[F])(cs: ContextShift[F]): F[Unit] = {
-    val testRun            = TestRunImpl(invoke)(cs)
-    val scenario: Scenario = Scenario.gen(invoke.methods, cfg.parallelism, cfg.length)
-    for {
-      spec <- deepCopyF(invoke)
-      logs <- testRun.run(scenario)
-      _ = println(PrintLogs.pretty(logs))
-      res  <- lts.check(spec, logs)
-      _ = res match {
-        case TestSuccess(logs) => println(PrintLogs.pretty(List(logs.toList)))
-        case other             => println(other)
+    scenarios.zipWithIndex
+      .map {
+        case (scenario, ind) =>
+          val iterations = List
+            .fill(cfg.scenarioRepetition)(())
+            .map(_ =>
+              for {
+                logs    <- testRun.run(scenario)
+                outcome <- lts.sequentially(invoke, logs)
+              } yield (logs, outcome))
+
+          for {
+            _ <- Sync[F].delay(println(s"Testing scenario ${ind + 1}"))
+            scenarioOutcome <- iterations.collectFirstSomeM[F, TestResult](testAction =>
+                                testAction.map {
+                                  case (_, CheckSuccess(_)) => None
+                                  case (logs, CheckFailure) => Some(TestFailure(logs))
+                              })
+          } yield scenarioOutcome
       }
-    } yield ()
+      .collectFirstSomeM[F, TestResult](identity)
+      .flatMap{
+        case Some(TestFailure(history)) => Sync[F].delay{
+          println("Test failed for scenario:")
+          println(PrintLogs.pretty(history))
+          TestFailure(history)
+        }
+        case None => Sync[F].delay{
+          println("Test suceeded")
+          TestSuccess
+        }
+      }
   }
 }

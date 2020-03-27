@@ -1,8 +1,9 @@
 package lotos.internal.testing
 
 import cats.Parallel
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
+import lotos.internal.deepcopy._
 import lotos.internal.model.{LogEvent, Scenario}
 
 trait TestRun[F[_]] {
@@ -10,15 +11,9 @@ trait TestRun[F[_]] {
 }
 
 case class TestRunImpl[F[_]: Concurrent: Parallel](invoke: Invoke[F])(cs: ContextShift[F]) extends TestRun[F] {
-  private var freshInvoke: Invoke[F] = invoke
-
   def run(scenario: Scenario): F[List[List[LogEvent]]] =
     for {
-      inv <- Sync[F].delay({
-              val inv = freshInvoke
-              freshInvoke = inv.copy
-              inv
-            })
+      inv <- deepCopyF(invoke)
       logs <- scenario.actions.parTraverse(act => cs.shift *> act.traverse(method => inv.invoke(method)))
     } yield logs
 }

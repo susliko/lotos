@@ -8,16 +8,19 @@ trait Gen[T] {
 object Gen extends GenPrimitiveInstances
 
 trait GenPrimitiveInstances {
-  implicit val intGen: Gen[Int] = new Gen[Int] {
-    def gen(seed: Long): Int = (seed % 100).toInt
+  implicit def intGen(limit: Int = 10): Gen[Int] = new Gen[Int] {
+    def gen(seed: Long): Int = (seed % limit).toInt
 
     def show(t: Int): String = t.toString
   }
 
-  implicit val stringGen: Gen[String] = new Gen[String] {
+  implicit def stringGen(length: Int = 5): Gen[String] = new Gen[String] {
     val alphabet = ('a' to 'z').zipWithIndex.map { case (a, b) => (b.toLong, a) }.toMap
     def gen(seed: Long): String =
-      new String(Array.fill(5)("").zipWithIndex.map { case (_, ind) => alphabet((seed << ind) % 26) })
+      new String(Array.fill(length)("").zipWithIndex.map {
+        case (_, ind) =>
+          alphabet(Math.abs((seed << ind) % 26))
+      })
 
     def show(t: String): String = t
   }

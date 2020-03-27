@@ -9,20 +9,22 @@ import cats.implicits._
 import scala.collection.immutable.ArraySeq
 import cats.Monad
 
-sealed trait TestResult
+sealed trait CheckResult
 
-case class TestSuccess(linearized: ArraySeq[LogEvent]) extends TestResult
-case object TestFailure                                extends TestResult
+case class CheckSuccess(linearized: ArraySeq[LogEvent]) extends CheckResult
+case object CheckFailure                                extends CheckResult
 
 object lts {
-  def check[F[_]](spec: Invoke[F], logs: List[List[LogEvent]])(implicit F: Sync[F]): F[TestResult] = {
+
+  // Check for the sequential consistency compliance
+  def sequentially[F[_]](spec: Invoke[F], logs: List[List[LogEvent]])(implicit F: Sync[F]): F[CheckResult] = {
 
     val history      = ArraySeq.from(logs).map(ArraySeq.from)
     val eventsCounts = history.map(_.size)
 
-    def go(spec: Invoke[F], candidates: List[(Int, Int)], linearized: ArraySeq[LogEvent]): F[TestResult] = {
+    def go(spec: Invoke[F], candidates: List[(Int, Int)], linearized: ArraySeq[LogEvent]): F[CheckResult] = {
       if (candidates.isEmpty) {
-        (TestSuccess(linearized): TestResult).pure[F]
+        (CheckSuccess(linearized): CheckResult).pure[F]
       } else
         candidates.zipWithIndex
           .map {
@@ -37,16 +39,15 @@ object lts {
                                candidates.updated(candidateId, (threadId, order + 1))
                              else candidates.patch(candidateId, Nil, 1)
                            go(specCopy, newCandidates, linearized :+ log)
-                         } else (TestFailure: TestResult).pure[F]
+                         } else (CheckFailure: CheckResult).pure[F]
               } yield result
           }
-          .collectFirstSomeM[F, TestResult](testAction =>
+          .collectFirstSomeM[F, CheckResult](testAction =>
             testAction.map {
-              case x @ TestSuccess(_) => Some(x)
-              case _                  => None
-            }
-          )
-          .map(_.getOrElse(TestFailure))
+              case x @ CheckSuccess(_) => Some(x)
+              case _                   => None
+          })
+          .map(_.getOrElse(CheckFailure))
 
     }
 

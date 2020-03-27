@@ -29,7 +29,7 @@ val macros = Keys.libraryDependencies ++= {
   }
 }
 
-lazy val internal = project
+lazy val lotosInternal = project
   .in(file("internal"))
   .settings(
     defaultSettings,
@@ -38,14 +38,20 @@ lazy val internal = project
 
 lazy val lotosMacro = project
   .in(file("macro"))
-  .dependsOn(internal)
-  .aggregate(internal)
+  .dependsOn(lotosInternal)
+  .aggregate(lotosInternal)
   .settings(defaultSettings, macros)
 
 lazy val lotosTesting = project
   .in(file("testing"))
-  .dependsOn(internal, lotosMacro)
-  .aggregate(internal, lotosMacro)
+  .dependsOn(lotosInternal, lotosMacro)
+  .aggregate(lotosInternal, lotosMacro)
+  .settings(defaultSettings)
+
+lazy val examples = project
+  .in(file("examples"))
+  .dependsOn(lotosTesting)
+  .aggregate(lotosTesting)
   .settings(defaultSettings)
 
 lazy val defaultSettings = Seq(
