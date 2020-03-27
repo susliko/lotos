@@ -1,10 +1,10 @@
 A library for testing concurrent data structures that you lacked!
 
-*Lotos* aims to provide a simple DSL and various concurrent guarantees checkers for your concurrent data structures.
+*Lotos* aims to provide a simple DSL and various concurrent guarantees checkers for your data structures.
 
 # Quick example
 
-Having some implementation:
+Having some implementation of a data structure:
 ```scala
 import java.{util => ju}
 
