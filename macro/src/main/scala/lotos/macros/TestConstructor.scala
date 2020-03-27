@@ -19,18 +19,20 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
   def constructF[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
-      cfg: c.Expr[TestConfig]
+      cfg: c.Expr[TestConfig],
+      consistency: c.Expr[Consistency]
   )(cs: c.Expr[ContextShift[F]]): c.Expr[F[TestResult]] = {
     val invoke = constructInvoke[F, Impl, Methods](spec)
 
-    val testRunTree = q"lotos.testing.LotosTest.run($cfg, $invoke)($cs)"
+    val testRunTree = q"lotos.testing.LotosTest.run($cfg, $invoke, $consistency)($cs)"
     val checkedTree = typeCheckOrAbort(testRunTree)
     c.Expr(checkedTree)
   }
 
   def constructIO[Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
-      cfg: c.Expr[TestConfig]
+      cfg: c.Expr[TestConfig],
+      consistency: c.Expr[Consistency]
   ): c.Expr[IO[TestResult]] = {
     val invoke = constructInvoke[IO, Impl, Methods](spec)
 
@@ -43,7 +45,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
        .make(IO(Executors.newFixedThreadPool($cfg.parallelism)))(ex => IO(ex.shutdown()))
        .map(ex => IO.contextShift(ExecutionContext.fromExecutor(ex)))
        
-      csResource.use(cs => lotos.testing.LotosTest.run($cfg, $invoke)(cs))
+      csResource.use(cs => lotos.testing.LotosTest.run($cfg, $invoke, $consistency)(cs))
       """
     val checkedTree = typeCheckOrAbort(testRunTree)
     c.Expr(checkedTree)

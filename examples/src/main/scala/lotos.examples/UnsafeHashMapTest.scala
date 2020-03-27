@@ -1,7 +1,7 @@
 package lotos.examples
 
 import cats.effect.{ExitCode, IO, IOApp}
-import lotos.internal.model.Gen
+import lotos.internal.model.{Consistency, Gen}
 import lotos.internal.testing.TestConfig
 import lotos.testing.LotosTest
 import lotos.testing.syntax._
@@ -17,7 +17,7 @@ object UnsafeHashMapTest extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      outcome <- LotosTest.forSpec(hashMapSpec, cfg)
+      _ <- LotosTest.forSpec(hashMapSpec, cfg, Consistency.sequential)
     } yield ExitCode.Success
 
 }

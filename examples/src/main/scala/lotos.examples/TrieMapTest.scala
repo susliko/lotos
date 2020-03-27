@@ -1,7 +1,7 @@
 package lotos.examples
 
 import cats.effect.{ExitCode, IO, IOApp}
-import lotos.internal.model.Gen
+import lotos.internal.model.{Consistency, Gen}
 import lotos.internal.testing.TestConfig
 import lotos.testing.LotosTest
 import lotos.testing.syntax._
@@ -19,7 +19,7 @@ object TrieMapTest extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      _ <- LotosTest.forSpec(trieMapSpec, cfg)
+      _ <- LotosTest.forSpec(trieMapSpec, cfg, Consistency.sequential)
     } yield ExitCode.Success
 
 }
