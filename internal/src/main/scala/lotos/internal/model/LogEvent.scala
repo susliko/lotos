@@ -34,8 +34,8 @@ object FuncCall {
 }
 
 case class FuncResp(methodName: String, showResult: String, timestamp: Long) extends LogEvent {
-  def show(withTime: Boolean): String                  = s"$methodName: $showResult"
-  def paramSeeds: Map[String, Long] = Map.empty
+  def show(withTime: Boolean): String = s"$methodName: $showResult"
+  def paramSeeds: Map[String, Long]   = Map.empty
 }
 
 object FuncResp {
@@ -67,10 +67,21 @@ object FuncInvocation {
   }
 }
 object PrintLogs {
-  def pretty(logs: List[List[LogEvent]], withTime: Boolean = false): String = {
-    val maxLength = logs.flatMap(_.map(_.show(withTime).length)).max
+  def pretty(logs: List[List[FuncInvocation]], withTime: Boolean = false): String = {
+    val timesMapping = logs
+      .flatMap(_.flatMap(event => List(event.start, event.end)))
+      .sorted
+      .zipWithIndex
+      .toMap
+      .view
+      .mapValues(_.toLong)
+      .toMap
 
-    logs.transpose
+    val logsWithTimes = logs.map(_.map(log =>
+      log.copy(start = timesMapping.getOrElse(log.start, log.start), end = timesMapping.getOrElse(log.end, log.end))))
+    val maxLength = logsWithTimes.flatMap(_.map(_.show(withTime).length)).max
+
+    logsWithTimes.transpose
       .map { row =>
         row
           .map(event => {
