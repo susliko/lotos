@@ -1,24 +1,68 @@
 package lotos.internal.model
 
-trait LogEvent {
+import cats.Eq
+
+trait LogEvent { self =>
   def methodName: String
   def show: String
-  def paramSeeds: Map[String, Long] 
+  def paramSeeds: Map[String, Long]
 }
 
-case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParams: String) extends LogEvent {
+object LogEvent {
+  implicit val catsEq: Eq[LogEvent] = Eq.instance {
+    case (a: FuncCall, b: FuncCall) =>
+      FuncCall.catsEq.eqv(a, b)
+    case (a: FuncResp, b: FuncResp) =>
+      FuncResp.catsEq.eqv(a, b)
+    case (a: FuncInvocation, b: FuncInvocation) =>
+      FuncInvocation.catsEq.eqv(a, b)
+    case _ =>
+      false
+  }
+}
+
+case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParams: String, timestamp: Long)
+    extends LogEvent {
   def show: String = s"$methodName($showParams)"
 }
 
-case class FuncResp(methodName: String, showResult: String) extends LogEvent {
-  def show: String = s"$methodName: $showResult"
-  def paramSeeds: Map[String,Long] = Map.empty
+object FuncCall {
+  implicit val catsEq: Eq[FuncCall] = Eq.instance {
+    case (a, b) =>
+      a.methodName == b.methodName && a.paramSeeds == b.paramSeeds && a.showParams == b.showParams
+  }
 }
-case class FuncInvocation(methodName: String, paramSeeds: Map[String, Long], showParams: String, showResult: String)
+
+case class FuncResp(methodName: String, showResult: String, timestamp: Long) extends LogEvent {
+  def show: String                  = s"$methodName: $showResult"
+  def paramSeeds: Map[String, Long] = Map.empty
+}
+
+object FuncResp {
+  implicit val catsEq: Eq[FuncResp] = Eq.instance {
+    case (a, b) =>
+      a.methodName == b.methodName && a.showResult == b.showResult
+  }
+}
+case class FuncInvocation(methodName: String,
+                          paramSeeds: Map[String, Long],
+                          showParams: String,
+                          showResult: String,
+                          start: Long,
+                          end: Long)
     extends LogEvent {
   def show: String = s"$methodName($showParams): $showResult"
 }
 
+object FuncInvocation {
+  implicit val catsEq: Eq[FuncInvocation] = Eq.instance {
+    case (a, b) =>
+      a.methodName == b.methodName &&
+        a.paramSeeds == b.paramSeeds &&
+        a.showParams == b.showParams &&
+        a.showResult == b.showResult
+  }
+}
 object PrintLogs {
   def pretty(logs: List[List[LogEvent]]): String = {
     val maxLength = logs.flatMap(_.map(_.show.length)).max

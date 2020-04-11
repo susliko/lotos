@@ -15,7 +15,7 @@ object TrieMapTest extends IOApp {
       .withMethod(method("put").param("key")(Gen.intGen(5)).param("value")(Gen.stringGen(1)))
       .withMethod(method("get").param("k")(Gen.intGen(5)))
 
-  val cfg = TestConfig(parallelism = 2, scenarioLength = 10, scenarioRepetition = 3, scenarioCount = 5)
+  val cfg = TestConfig(parallelism = 2, scenarioLength = 4, scenarioRepetition = 3, scenarioCount = 5)
 
   override def run(args: List[String]): IO[ExitCode] =
     for {

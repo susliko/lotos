@@ -7,7 +7,6 @@ import lotos.internal.deepcopy._
 import cats.implicits._
 
 import scala.collection.immutable.ArraySeq
-import cats.Monad
 
 sealed trait CheckResult
 
@@ -21,39 +20,55 @@ object lts {
 
     val history      = ArraySeq.from(logs).map(ArraySeq.from)
     val eventsCounts = history.map(_.size)
+    val eventsTotal  = eventsCounts.sum
 
-    def go(spec: Invoke[F], candidates: List[(Int, Int)], linearized: ArraySeq[LogEvent]): F[CheckResult] = {
-      if (candidates.isEmpty) {
-        (CheckSuccess(linearized): CheckResult).pure[F]
-      } else
-        candidates.zipWithIndex
-          .map {
-            case ((threadId, order), candidateId) =>
-              for {
-                specCopy    <- deepCopyF(spec)
-                log         = history(threadId)(order)
-                moveForward <- validate(specCopy, history(threadId)(order))
-                result <- if (moveForward) {
-                           val newCandidates =
-                             if (order < eventsCounts(threadId) - 1)
-                               candidates.updated(candidateId, (threadId, order + 1))
-                             else candidates.patch(candidateId, Nil, 1)
-                           go(specCopy, newCandidates, linearized :+ log)
-                         } else (CheckFailure: CheckResult).pure[F]
-              } yield result
-          }
-          .collectFirstSomeM[F, CheckResult](testAction =>
-            testAction.map {
-              case x @ CheckSuccess(_) => Some(x)
-              case _                   => None
-          })
-          .map(_.getOrElse(CheckFailure))
+    go(spec,
+       List.iterate((0, 0), history.size) { case (threadId, ind) => (threadId + 1, ind) },
+       ArraySeq.empty,
+       history,
+       eventsCounts,
+       eventsTotal)
+  }
 
-    }
+//  def linearizable[F[_]](spec: Invoke[F], logs: List[List[LogEvent]])(implicit F: Sync[F]): F[CheckResult] = {
+//    val history      = ArraySeq.from(logs.map(ArraySeq.from))
+//    val eventsCounts = history.map(_.size)
+//  }
 
-    go(spec, List.iterate((0, 0), history.size) { case (threadId, ind) => (threadId + 1, ind) }, ArraySeq.empty)
+  private def go[F[_]: Sync](spec: Invoke[F],
+                             candidates: List[(Int, Int)],
+                             linearized: ArraySeq[LogEvent],
+                             history: ArraySeq[ArraySeq[LogEvent]],
+                             eventsCounts: ArraySeq[Int],
+                             eventsTotal: Long): F[CheckResult] = {
+    if (linearized.size == eventsTotal) {
+      (CheckSuccess(linearized): CheckResult).pure[F]
+    } else
+      candidates.zipWithIndex
+        .map {
+          case ((threadId, order), candidateId) =>
+            for {
+              specCopy    <- deepCopyF(spec)
+              log         = history(threadId)(order)
+              moveForward <- validate(specCopy, history(threadId)(order))
+              result <- if (moveForward) {
+                         val newCandidates =
+                           if (order < eventsCounts(threadId) - 1)
+                             candidates.updated(candidateId, (threadId, order + 1))
+                           else candidates.patch(candidateId, Nil, 1)
+                         go(specCopy, newCandidates, linearized :+ log, history, eventsCounts, eventsTotal)
+                       } else (CheckFailure: CheckResult).pure[F]
+            } yield result
+        }
+        .collectFirstSomeM[F, CheckResult](testAction =>
+          testAction.map {
+            case x @ CheckSuccess(_) => Some(x)
+            case _                   => None
+        })
+        .map(_.getOrElse(CheckFailure))
+
   }
 
   private def validate[F[_]: Functor](spec: Invoke[F], event: LogEvent): F[Boolean] =
-    spec.seedsInvoke(event.methodName, event.paramSeeds).map(_ == event)
+    spec.invokeWithSeeds(event.methodName, event.paramSeeds).map(specEvent => LogEvent.catsEq.eqv(specEvent, event))
 }

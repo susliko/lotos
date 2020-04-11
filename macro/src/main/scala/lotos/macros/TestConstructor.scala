@@ -103,12 +103,14 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
               q"$syncF.delay(impl.${TermName(mName)}.toString)"
             else
               q"$syncF.delay(impl.${TermName(mName)}(..$paramList).toString)"
+
           val seeds =
             if (withSeeds) q""
             else
               q"""val seeds: Map[String, Long] = Map(..${params.map {
                 case (pName, _) => q"$pName -> random.nextLong()"
               }})"""
+
           cq"""${q"$mName"} =>
             $seeds
             var showParams: Map[String, String] = Map.empty
@@ -116,14 +118,19 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
                 SpecT.methods($spec)(method)
                      .asInstanceOf[MethodT[..${methodTypeParams(mName)}]]
             val paramGens = MethodT.paramGens(methodT)
-            $invocation.map { res =>
-               FuncInvocation(${q"$mName"},
-                        seeds,
-                        showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", "),
-                        res.toString)
-            }
+            for {
+              startTime <- $syncF.delay(System.nanoTime)
+              result <- $invocation
+              endTime <- $syncF.delay(System.nanoTime)
+            } yield FuncInvocation(
+                        methodName = ${q"$mName"},
+                        paramSeeds = seeds,
+                        showParams = showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", "),
+                        showResult = result.toString,
+                        start = startTime,
+                        end = endTime)
           """
-      } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "")) """
+      } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "", 0L)) """
 
     val invokeTree  = q"""
     import lotos.internal.model._
@@ -136,11 +143,11 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       private val impl = SpecT.construct($spec)
 
       def copy: Invoke[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[LogEvent])} = 
+      def invoke(method: String): ${appliedType(FT, typeOf[LogEvent])} =
         method match {
             case ..${methodMatch(withSeeds = false)}
         }
-      def seedsInvoke(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[LogEvent])} = 
+      def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[LogEvent])} =
         method match {
           case ..${methodMatch(withSeeds = true)}
         }
@@ -207,18 +214,6 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
           .collectFirst {
             case x => x
           }
-    }
-
-  private def findMeth(typ: Type, group: Vector[String], name: Name): Option[MethodSymbol] =
-    group match {
-      case first +: rest =>
-        typ.decl(TermName(first)) match {
-          case ms: MethodSymbol if ms.paramLists == Nil => findMeth(ms.typeSignature, rest, name)
-          case ms: MethodSymbol                         => abort(s"group $first is a method with parameters : ${ms.paramLists}")
-          case ms: ModuleSymbol                         => findMeth(ms.typeSignature, rest, name)
-          case _                                        => None
-        }
-      case Vector() => extractMeth(typ, name)
     }
 
   private def unpackString(sType: Type): String =
