@@ -125,12 +125,12 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
             } yield FuncInvocation(
                         methodName = ${q"$mName"},
                         paramSeeds = seeds,
-                        showParams = showParams.toList.map{case (k, v) => k + " = " + v}.mkString(", "),
+                        showParams = showParams.toList.map{case (k, v) => k + "=" + v}.mkString(", "),
                         showResult = result.toString,
                         start = startTime,
                         end = endTime)
           """
-      } :+ cq"""_ => $syncF.pure(FuncCall("Unknown method", Map.empty, "", 0L)) """
+      } :+ cq"""_ => $syncF.pure(FuncInvocation("Unknown method", Map.empty, "", "", 0L, 0L)) """
 
     val invokeTree  = q"""
     import lotos.internal.model._
@@ -143,11 +143,11 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       private val impl = SpecT.construct($spec)
 
       def copy: Invoke[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[LogEvent])} =
+      def invoke(method: String): ${appliedType(FT, typeOf[FuncInvocation])} =
         method match {
             case ..${methodMatch(withSeeds = false)}
         }
-      def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[LogEvent])} =
+      def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[FuncInvocation])} =
         method match {
           case ..${methodMatch(withSeeds = true)}
         }

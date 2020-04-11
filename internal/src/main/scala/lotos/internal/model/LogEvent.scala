@@ -4,7 +4,7 @@ import cats.Eq
 
 trait LogEvent { self =>
   def methodName: String
-  def show: String
+  def show(withTime: Boolean = false): String
   def paramSeeds: Map[String, Long]
 }
 
@@ -23,7 +23,7 @@ object LogEvent {
 
 case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParams: String, timestamp: Long)
     extends LogEvent {
-  def show: String = s"$methodName($showParams)"
+  def show(withTime: Boolean): String = s"$methodName($showParams)"
 }
 
 object FuncCall {
@@ -34,7 +34,7 @@ object FuncCall {
 }
 
 case class FuncResp(methodName: String, showResult: String, timestamp: Long) extends LogEvent {
-  def show: String                  = s"$methodName: $showResult"
+  def show(withTime: Boolean): String                  = s"$methodName: $showResult"
   def paramSeeds: Map[String, Long] = Map.empty
 }
 
@@ -51,7 +51,10 @@ case class FuncInvocation(methodName: String,
                           start: Long,
                           end: Long)
     extends LogEvent {
-  def show: String = s"$methodName($showParams): $showResult"
+  def show(withTime: Boolean): String = {
+    val time = if (withTime) s"[$start, $end]" else ""
+    s"$methodName($showParams):$showResult $time"
+  }
 }
 
 object FuncInvocation {
@@ -64,14 +67,14 @@ object FuncInvocation {
   }
 }
 object PrintLogs {
-  def pretty(logs: List[List[LogEvent]]): String = {
-    val maxLength = logs.flatMap(_.map(_.show.length)).max
+  def pretty(logs: List[List[LogEvent]], withTime: Boolean = false): String = {
+    val maxLength = logs.flatMap(_.map(_.show(withTime).length)).max
 
     logs.transpose
       .map { row =>
         row
           .map(event => {
-            val str = event.show
+            val str = event.show(withTime)
             s""" $str${new String(Array.fill(maxLength - str.length)(' '))} """
           })
           .mkString("|")

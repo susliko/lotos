@@ -15,11 +15,11 @@ object TrieMapTest extends IOApp {
       .withMethod(method("put").param("key")(Gen.intGen(5)).param("value")(Gen.stringGen(1)))
       .withMethod(method("get").param("k")(Gen.intGen(5)))
 
-  val cfg = TestConfig(parallelism = 2, scenarioLength = 4, scenarioRepetition = 3, scenarioCount = 5)
+  val cfg = TestConfig(parallelism = 5, scenarioLength = 4, scenarioRepetition = 100, scenarioCount = 10)
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      _ <- LotosTest.forSpec(trieMapSpec, cfg, Consistency.sequential)
+      _ <- LotosTest.forSpec(trieMapSpec, cfg, Consistency.linearizable)
     } yield ExitCode.Success
 
 }

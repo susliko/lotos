@@ -13,11 +13,11 @@ object UnsafeHashMapTest extends IOApp {
       .withMethod(method("put").param("key")(Gen.intGen(1)).param("value")(Gen.stringGen(1)))
       .withMethod(method("get").param("key")(Gen.intGen(1)))
 
-  val cfg = TestConfig(parallelism = 2, scenarioLength = 2, scenarioRepetition = 3, scenarioCount = 5)
+  val cfg = TestConfig(parallelism = 2, scenarioLength = 2, scenarioRepetition = 20, scenarioCount = 5)
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      _ <- LotosTest.forSpec(hashMapSpec, cfg, Consistency.sequential)
+      _ <- LotosTest.forSpec(hashMapSpec, cfg, Consistency.linearizable)
     } yield ExitCode.Success
 
 }

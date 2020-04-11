@@ -36,8 +36,11 @@ object LotosTest {
             .fill(cfg.scenarioRepetition)(())
             .map(_ =>
               for {
-                logs    <- testRun.run(scenario)
-                outcome <- lts.sequentially(invoke, logs)
+                logs <- testRun.run(scenario)
+                outcome <- consistency match {
+                            case Consistency.sequential   => lts.sequentially(invoke, logs)
+                            case Consistency.linearizable => lts.linearizable(invoke, logs)
+                          }
               } yield (logs, outcome))
 
           for {
@@ -54,7 +57,7 @@ object LotosTest {
         case Some(TestFailure(history)) =>
           Sync[F].delay {
             println("Test failed for scenario:")
-            println(PrintLogs.pretty(history))
+            println(PrintLogs.pretty(history, withTime = consistency == Consistency.linearizable))
             TestFailure(history)
           }
         case _ =>
