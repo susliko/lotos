@@ -1,10 +1,10 @@
 A library for testing concurrent data structures that you lacked!
 
-*Lotos* aims to provide a simple DSL and various concurrent guarantees checkers for your concurrent data structures.
+*Lotos* aims to provide a simple DSL and various concurrent guarantees checkers for your data structures.
 
 # Quick example
 
-Having some implementation:
+Having some implementation of a data structure:
 ```scala
 import java.{util => ju}
 
@@ -20,16 +20,18 @@ describe its specification via Lotos DSL and run the test:
 object UnsafeHashMapTest extends IOApp {
   val hashMapSpec =
     spec(new UnsafeHashMap)
-      .withMethod(method("put").param("key")(Gen.intGen(1)).param("value")(Gen.stringGen(1)))
-      .withMethod(method("get").param("key")(Gen.intGen(1)))
+      .withMethod(
+        method("put")
+          .param("key")(Gen.intGen(1))
+          .param("value")(Gen.stringGen(1)))
+      .withMethod(
+        method("get")
+          .param("key")(Gen.intGen(1)))
 
   val cfg = TestConfig(parallelism = 2, scenarioLength = 2, scenarioRepetition = 3, scenarioCount = 5)
 
-  override def run(args: List[String]): IO[ExitCode] =
-    for {
-      _ <- LotosTest.forSpec(hashMapSpec, cfg, Consistency.sequential)
-    } yield ExitCode.Success
-
+  def run(args: List[String]): IO[ExitCode] =
+      LotosTest.forSpec(hashMapSpec, cfg, Consistency.sequential) as ExitCode.Success
 }
 ```
 
