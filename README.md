@@ -1,4 +1,4 @@
-[![Maven Central](https://img.shields.io/maven-central/v/dev.susliko/lotos-testing)](https://search.maven.org/search?q=dev.susliko.lotos-testing)
+[![Maven Central](https://img.shields.io/maven-central/v/dev.susliko/lotos-testing_2.13.svg)](https://search.maven.org/search?q=dev.susliko.lotos-testing)
 
 A library for testing concurrent data structures that you lacked!
 
