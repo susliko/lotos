@@ -2,7 +2,11 @@
 
 A library for testing concurrent data structures that you lacked!
 
-*Lotos* aims to provide a simple DSL for specs description and various consistency model checkers.
+*Lotos* aims to provide:
+1. Simple DSL for specifications
+2. Configurable generator of test scenarios
+3. Various consistency model checkers
+4. Verbose consistency violation reports
 
 # Quick example
 
