@@ -6,8 +6,16 @@ import lotos.internal.testing.TestConfig
 import lotos.testing.LotosTest
 import lotos.testing.syntax.{method, spec}
 
+import java.{util => ju}
+
+class UnsafeHashMap extends Serializable {
+  val underlying = new ju.HashMap[Int, String]
+  def put(key: Int, value: String): Option[String] = Option(underlying.put(key, value))
+  def get(key: Int): Option[String] = Option(underlying.get(key))
+}
+
 /*_*/
-object UnsafeHashMapTest extends IOApp {
+object HashMapTest extends IOApp {
   val hashMapSpec =
     spec(new UnsafeHashMap)
       .withMethod(method("put").param("key")(Gen.intGen(1)).param("value")(Gen.stringGen(1)))

@@ -7,6 +7,6 @@ object Publish {
 
   val publishName: SettingKey[String] = SettingKey(
     label = "publishName",
-    description = "module name, it will be prefixed with tofu- in the artifact name"
+    description = "module name, it will be prefixed with lotos- in the artifact name"
   )
 }

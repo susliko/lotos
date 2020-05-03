@@ -57,7 +57,7 @@ object LotosTest {
         case Some(TestFailure(history)) =>
           Sync[F].delay {
             println("Test failed for scenario:")
-            println(PrintLogs.pretty(history, withTime = consistency == Consistency.linearizable))
+            println(PrintLogs.pretty(history))
             TestFailure(history)
           }
         case _ =>

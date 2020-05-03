@@ -4,7 +4,7 @@ import cats.Eq
 
 trait LogEvent { self =>
   def methodName: String
-  def show(withTime: Boolean = false): String
+  def show: String
   def paramSeeds: Map[String, Long]
 }
 
@@ -23,7 +23,7 @@ object LogEvent {
 
 case class FuncCall(methodName: String, paramSeeds: Map[String, Long], showParams: String, timestamp: Long)
     extends LogEvent {
-  def show(withTime: Boolean): String = s"$methodName($showParams)"
+  def show: String = s"$methodName($showParams)"
 }
 
 object FuncCall {
@@ -34,8 +34,8 @@ object FuncCall {
 }
 
 case class FuncResp(methodName: String, showResult: String, timestamp: Long) extends LogEvent {
-  def show(withTime: Boolean): String = s"$methodName: $showResult"
-  def paramSeeds: Map[String, Long]   = Map.empty
+  def show: String                  = s"$methodName: $showResult"
+  def paramSeeds: Map[String, Long] = Map.empty
 }
 
 object FuncResp {
@@ -51,10 +51,7 @@ case class FuncInvocation(methodName: String,
                           start: Long,
                           end: Long)
     extends LogEvent {
-  def show(withTime: Boolean): String = {
-    val time = if (withTime) s"[$start, $end]" else ""
-    s"$methodName($showParams):$showResult $time"
-  }
+  def show: String = s"[$start; $end] $methodName($showParams):$showResult"
 }
 
 object FuncInvocation {
@@ -67,7 +64,7 @@ object FuncInvocation {
   }
 }
 object PrintLogs {
-  def pretty(logs: List[List[FuncInvocation]], withTime: Boolean = false): String = {
+  def pretty(logs: List[List[FuncInvocation]]): String = {
     val timesMapping = logs
       .flatMap(_.flatMap(event => List(event.start, event.end)))
       .sorted
@@ -79,13 +76,12 @@ object PrintLogs {
 
     val logsWithTimes = logs.map(_.map(log =>
       log.copy(start = timesMapping.getOrElse(log.start, log.start), end = timesMapping.getOrElse(log.end, log.end))))
-    val maxLength = logsWithTimes.flatMap(_.map(_.show(withTime).length)).max
-
+    val maxLength = logsWithTimes.flatMap(_.map(_.show.length)).max
     logsWithTimes.transpose
       .map { row =>
         row
           .map(event => {
-            val str = event.show(withTime)
+            val str = event.show
             s""" $str${new String(Array.fill(maxLength - str.length)(' '))} """
           })
           .mkString("|")
