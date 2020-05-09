@@ -33,15 +33,15 @@ object LotosTest {
       .map {
         case (scenario, ind) =>
           val iterations = List
-            .fill(cfg.scenarioRepetition)(())
-            .map(_ =>
+            .fill(cfg.scenarioRepetition) {
               for {
                 logs <- testRun.run(scenario)
                 outcome <- consistency match {
                             case Consistency.sequential   => lts.sequentially(invoke, logs)
                             case Consistency.linearizable => lts.linearizable(invoke, logs)
                           }
-              } yield (logs, outcome))
+              } yield (logs, outcome)
+            }
 
           for {
             _ <- Sync[F].delay(println(s"Testing scenario ${ind + 1}"))
