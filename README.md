@@ -1,6 +1,12 @@
+[![Maven Central](https://img.shields.io/maven-central/v/dev.susliko/lotos-testing_2.13.svg)](https://search.maven.org/search?q=dev.susliko.lotos-testing)
+
 A library for testing concurrent data structures that you lacked!
 
-*Lotos* aims to provide a simple DSL and various concurrent guarantees checkers for your data structures.
+*Lotos* aims to provide:
+1. Simple DSL for specifications
+2. Configurable generator of test scenarios
+3. Various consistency model checkers
+4. Verbose consistency violation reports
 
 # Quick example
 
