@@ -2,18 +2,17 @@ package lotos.internal.testing
 
 import cats.Functor
 import cats.effect.Sync
-import lotos.internal.model.{FuncInvocation, LogEvent}
-import lotos.internal.deepcopy._
 import cats.implicits._
+import lotos.internal.deepcopy._
+import lotos.model.{FuncInvocation, LogEvent}
 
 import scala.collection.immutable.ArraySeq
 
-sealed trait CheckResult
-
-case class CheckSuccess(linearized: ArraySeq[LogEvent]) extends CheckResult
-case object CheckFailure                                extends CheckResult
-
 object lts {
+  sealed trait CheckResult
+
+  case class CheckSuccess(linearized: ArraySeq[LogEvent]) extends CheckResult
+  case object CheckFailure                                extends CheckResult
 
   // Check for the sequential consistency compliance
   def sequentially[F[_]](spec: Invoke[F], logs: List[List[FuncInvocation]])(implicit F: Sync[F]): F[CheckResult] = {

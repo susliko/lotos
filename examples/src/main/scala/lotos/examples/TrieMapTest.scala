@@ -1,8 +1,7 @@
 package lotos.examples
 
 import cats.effect.{ExitCode, IO, IOApp}
-import lotos.internal.model.{Consistency, Gen}
-import lotos.internal.testing.TestConfig
+import lotos.model.{Consistency, Gen, TestConfig}
 import lotos.testing.LotosTest
 import lotos.testing.syntax.{method, spec}
 

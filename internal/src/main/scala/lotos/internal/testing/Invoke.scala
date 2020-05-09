@@ -1,6 +1,6 @@
 package lotos.internal.testing
 
-import lotos.internal.model.FuncInvocation
+import lotos.model.FuncInvocation
 
 trait Invoke[F[_]] extends Serializable {
   def copy: Invoke[F]

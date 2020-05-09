@@ -40,21 +40,24 @@ def lotosModule(id: String) =
   Project(id, file(s"$id"))
     .configure(configure(id))
 
+lazy val lotosModel = lotosModule("model")
 lazy val lotosInternal = lotosModule("internal")
-lazy val lotosMacro = lotosModule("macro")
-  .dependsOn(lotosInternal)
-  .aggregate(lotosInternal)
+  .dependsOn(lotosModel)
+  .dependsOn(lotosModel)
+lazy val lotosMacros = lotosModule("macros")
+  .dependsOn(lotosModel, lotosInternal)
+  .aggregate(lotosModel, lotosInternal)
 lazy val lotosTesting = lotosModule("testing")
-  .dependsOn(lotosInternal, lotosMacro)
-  .aggregate(lotosInternal, lotosMacro)
+  .dependsOn(lotosModel, lotosInternal, lotosMacros)
+  .aggregate(lotosModel, lotosInternal, lotosMacros)
 lazy val lotosExamples = lotosModule("examples")
   .settings(
     skip in publish := true
   )
-  .dependsOn(lotosInternal, lotosTesting)
-  .aggregate(lotosInternal, lotosTesting)
+  .dependsOn(lotosTesting)
+  .aggregate(lotosTesting)
 
-lazy val modules: List[ProjectReference] = List(lotosInternal, lotosMacro, lotosTesting, lotosExamples)
+lazy val modules: List[ProjectReference] = List(lotosModel, lotosInternal, lotosMacros, lotosTesting, lotosExamples)
 
 lazy val lotos = project
   .in(file("."))

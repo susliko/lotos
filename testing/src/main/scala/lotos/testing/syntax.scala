@@ -1,6 +1,6 @@
 package lotos.testing
 
-import lotos.internal.model.{MethodT, SpecT}
+import lotos.model.{MethodT, SpecT}
 import shapeless.HNil
 
 package object syntax {

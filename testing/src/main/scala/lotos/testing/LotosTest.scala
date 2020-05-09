@@ -3,8 +3,9 @@ package lotos.testing
 import cats.Parallel
 import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.implicits._
-import lotos.internal.model.{Consistency, PrintLogs, Scenario, SpecT, TestFailure, TestResult, TestSuccess}
+import lotos.model.{Consistency, PrintLogs, Scenario, SpecT, TestConfig, TestFailure, TestResult, TestSuccess}
 import lotos.internal.testing._
+import lotos.internal.testing.lts.{CheckFailure, CheckSuccess}
 import lotos.macros.TestConstructor
 import shapeless.HList
 

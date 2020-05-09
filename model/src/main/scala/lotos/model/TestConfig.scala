@@ -1,4 +1,4 @@
-package lotos.internal.testing
+package lotos.model
 
 case class TestConfig(parallelism: Int = 2,
                       scenarioLength: Int = 10,

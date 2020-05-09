@@ -1,17 +1,15 @@
 package lotos.examples
 
 import cats.effect.{ExitCode, IO, IOApp}
-import lotos.internal.model.{Consistency, Gen}
-import lotos.internal.testing.TestConfig
+import lotos.model.{Consistency, Gen, TestConfig}
 import lotos.testing.LotosTest
 import lotos.testing.syntax.{method, spec}
-
 import java.{util => ju}
 
 class UnsafeHashMap extends Serializable {
-  val underlying = new ju.HashMap[Int, String]
+  val underlying                                   = new ju.HashMap[Int, String]
   def put(key: Int, value: String): Option[String] = Option(underlying.put(key, value))
-  def get(key: Int): Option[String] = Option(underlying.get(key))
+  def get(key: Int): Option[String]                = Option(underlying.get(key))
 }
 
 /*_*/

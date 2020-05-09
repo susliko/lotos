@@ -1,4 +1,4 @@
-package lotos.internal.model
+package lotos.model
 
 sealed trait Consistency
 

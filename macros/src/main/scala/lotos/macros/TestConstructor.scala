@@ -4,9 +4,9 @@ import cats.effect.{ContextShift, IO, Sync}
 import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.traverse._
-import lotos.internal.model._
-import lotos.internal.testing.{Invoke, TestConfig}
-import lotos.internal.model.TestResult
+import lotos.model._
+import lotos.internal.testing.Invoke
+import lotos.model.TestResult
 import shapeless.{HList, HNil}
 
 import scala.reflect.NameTransformer
@@ -133,7 +133,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       } :+ cq"""_ => $syncF.pure(FuncInvocation("Unknown method", Map.empty, "", "", 0L, 0L)) """
 
     val invokeTree  = q"""
-    import lotos.internal.model._
+    import lotos.model._
 
     import lotos.internal.testing._
     import scala.util.Random
