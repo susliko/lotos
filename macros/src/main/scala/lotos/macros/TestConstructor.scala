@@ -1,6 +1,6 @@
 package lotos.macros
 
-import cats.effect.{ContextShift, IO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.traverse._
@@ -21,8 +21,8 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       spec: c.Expr[SpecT[Impl, Methods]],
       cfg: c.Expr[TestConfig],
       consistency: c.Expr[Consistency]
-  )(cs: c.Expr[ContextShift[F]]): c.Expr[F[TestResult]] = {
-    val invoke = constructInvoke[F, Impl, Methods](spec)
+  )(cs: c.Expr[ContextShift[F]])(F: c.Expr[Concurrent[F]]): c.Expr[F[TestResult]] = {
+    val invoke = constructInvoke[F, Impl, Methods](spec)(F)
 
     val testRunTree = q"lotos.testing.LotosTest.run($cfg, $invoke, $consistency)($cs)"
     val checkedTree = typeCheckOrAbort(testRunTree)
@@ -34,8 +34,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       cfg: c.Expr[TestConfig],
       consistency: c.Expr[Consistency]
   ): c.Expr[IO[TestResult]] = {
-    val invoke = constructInvoke[IO, Impl, Methods](spec)
-
+    val invoke      = constructInvoke[IO, Impl, Methods](spec)(c.Expr(q"cats.effect.IO.ioEffect"))
     val testRunTree = q"""
       import cats.effect.{ContextShift, Resource}
       import scala.concurrent.ExecutionContext
@@ -53,16 +52,9 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
   private def constructInvoke[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
-  ): c.Expr[Invoke[F]] = {
+  )(syncF: c.Expr[Sync[F]]): c.Expr[Invoke[F]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
-
-    val syncF = inferImplicitOrAbort(
-      appliedType(
-        weakTypeOf[Sync[F]].typeConstructor,
-        FT
-      )
-    )
 
     val implT = weakTypeOf[Impl]
     val specT = weakTypeOf[Methods]
@@ -133,26 +125,26 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       } :+ cq"""_ => $syncF.pure(FuncInvocation("Unknown method", Map.empty, "", "", 0L, 0L)) """
 
     val invokeTree  = q"""
-    import lotos.model._
+      import lotos.model._
 
-    import lotos.internal.testing._
-    import scala.util.Random
+      import lotos.internal.testing._
+      import scala.util.Random
 
-    new Invoke[$FT] {
-      private val random = new Random(System.currentTimeMillis())
-      private val impl = SpecT.construct($spec)
+      new Invoke[$FT] {
+        private val random = new Random(System.currentTimeMillis())
+        private val impl = SpecT.construct($spec)
 
-      def copy: Invoke[$FT] = this
-      def invoke(method: String): ${appliedType(FT, typeOf[FuncInvocation])} =
-        method match {
-            case ..${methodMatch(withSeeds = false)}
-        }
-      def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[FuncInvocation])} =
-        method match {
-          case ..${methodMatch(withSeeds = true)}
-        }
-      def methods: List[String] = ${specMethods.map(_._1)}
-    }
+        def copy: Invoke[$FT] = this
+        def invoke(method: String): ${appliedType(FT, typeOf[FuncInvocation])} =
+          method match {
+              case ..${methodMatch(withSeeds = false)}
+          }
+        def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[FuncInvocation])} =
+          method match {
+            case ..${methodMatch(withSeeds = true)}
+          }
+        def methods: List[String] = ${specMethods.map(_._1)}
+      }
      """
     val checkedTree = typeCheckOrAbort(invokeTree)
     c.Expr(checkedTree)
@@ -188,40 +180,4 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
         validation.fold(abort, identity)
     }
   }
-
-  private def extractMethods(tpe: Type): NList[MethodDecl[Type]] =
-    tpe.decls.collect {
-      case s: MethodSymbol =>
-        symbolName(s) ->
-          (s.infoIn(tpe)
-            .paramLists
-            .map(lst => lst.map(p => symbolName(p) -> p.typeSignature)) ->
-            s.infoIn(tpe).resultType)
-    }.toList
-
-  private def extractMeth(typ: Type, name: Name): Option[MethodSymbol] =
-    typ.decl(name) match {
-      case ms: MethodSymbol                 => Some(ms)
-      case ov if ov.alternatives.length > 1 => abort("could not handle method overloading")
-      case _ =>
-        typ.baseClasses.tail.iterator
-          .collect {
-            case base: TypeSymbol if base != typ => base.toType
-          }
-          .flatMap {
-            extractMeth(_, name)
-          }
-          .collectFirst {
-            case x => x
-          }
-    }
-
-  private def unpackString(sType: Type): String =
-    sType match {
-      case ConstantType(Constant(s: String)) => NameTransformer.encode(s)
-      case x                                 => abort(s"$x should be a string constant")
-    }
-
-  private def symbolName(symbol: Symbol) = symbol.name.decodedName.toString
-
 }

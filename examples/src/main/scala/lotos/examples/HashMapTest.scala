@@ -9,7 +9,7 @@ import java.{util => ju}
 class UnsafeHashMap extends Serializable {
   val underlying                                   = new ju.HashMap[Int, String]
   def put(key: Int, value: String): Option[String] = Option(underlying.put(key, value))
-  def get(key: Int): Option[String]                = Option(underlying.get(key))
+  def get(key: Int): String = Option(underlying.get(key)).getOrElse(throw new NoSuchElementException)
 }
 
 /*_*/

@@ -3,9 +3,9 @@ package lotos.testing
 import cats.Parallel
 import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.implicits._
-import lotos.model.{Consistency, PrintLogs, Scenario, SpecT, TestConfig, TestFailure, TestResult, TestSuccess}
+import lotos.model._
 import lotos.internal.testing._
-import lotos.internal.testing.lts.{CheckFailure, CheckSuccess}
+import lotos.internal.testing.lts._
 import lotos.macros.TestConstructor
 import shapeless.HList
 
@@ -18,14 +18,14 @@ object LotosTest {
                                       consistency: Consistency): IO[TestResult] =
     macro TestConstructor.constructIO[Impl, Methods]
 
-  class Runner[F[_]: Concurrent: Parallel] {
+  class Runner[F[_]: Parallel] {
     def forSpec[Impl, Methods <: HList](spec: SpecT[Impl, Methods], cfg: TestConfig, consistency: Consistency)(
-        cs: ContextShift[F]): F[TestResult] =
+        cs: ContextShift[F])(implicit F: Concurrent[F]): F[TestResult] =
       macro TestConstructor.constructF[F, Impl, Methods]
   }
 
-  def run[F[_]: Concurrent: Parallel](cfg: TestConfig, invoke: Invoke[F], consistency: Consistency)(
-      cs: ContextShift[F]): F[TestResult] = {
+  def run[F[_]: Parallel](cfg: TestConfig, invoke: Invoke[F], consistency: Consistency)(cs: ContextShift[F])(
+      implicit F: Concurrent[F]): F[TestResult] = {
     val testRun = TestRunImpl(invoke)(cs)
     val scenarios: List[Scenario] =
       List.fill(cfg.scenarioCount)(Scenario.gen(invoke.methods, cfg.parallelism, cfg.scenarioLength))
@@ -45,7 +45,7 @@ object LotosTest {
             }
 
           for {
-            _ <- Sync[F].delay(println(s"Testing scenario ${ind + 1}"))
+            _ <- F.delay(println(s"Testing scenario ${ind + 1}"))
             scenarioOutcome <- iterations.collectFirstSomeM[F, TestResult](testAction =>
                                 testAction.map {
                                   case (_, CheckSuccess(_)) => None
@@ -55,15 +55,20 @@ object LotosTest {
       }
       .collectFirstSomeM[F, TestResult](identity)
       .flatMap {
-        case Some(TestFailure(history)) =>
-          Sync[F].delay {
+        case Some(failure @ TestFailure(history)) =>
+          F.delay {
             println("Test failed for scenario:")
             println(PrintLogs.pretty(history))
-            TestFailure(history)
+            failure
+          }
+        case Some(crash @ TestCrash(error)) =>
+          F.delay {
+            println(s"Test crashed due to an unexpected error $error")
+            crash
           }
         case _ =>
-          Sync[F].delay {
-            println("Test suceeded")
+          F.delay {
+            println("Test succeeded")
             TestSuccess
           }
       }
