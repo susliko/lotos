@@ -6,8 +6,7 @@ class SpecT[I, Methods <: HList](
     protected val construct: () => I,
     protected val methods: Map[String, AnyRef],
 ) {
-  def withMethod[Name, ParamGens <: HList, Errors <: HList](
-      m: MethodT[Name, ParamGens, Errors]): SpecT[I, MethodT[Name, ParamGens, Errors] :: Methods] =
+  def withMethod[Name, ParamGens <: HList](m: MethodT[Name, ParamGens]): SpecT[I, MethodT[Name, ParamGens] :: Methods] =
     new SpecT(construct = this.construct, methods = methods + (MethodT.name(m) -> m))
 }
 

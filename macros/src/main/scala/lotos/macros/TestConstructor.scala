@@ -54,7 +54,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       spec: c.Expr[SpecT[Impl, Methods]],
   )(syncF: c.Expr[Sync[F]]): c.Expr[Invoke[F]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
-    val methodT = weakTypeOf[MethodT[Unit, HNil, HNil]].typeConstructor
+    val methodT = weakTypeOf[MethodT[Unit, HNil]].typeConstructor
 
     val implT = weakTypeOf[Impl]
     val specT = weakTypeOf[Methods]
@@ -63,15 +63,15 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
     val specMethods: List[(String, NList[Type])] = hlistElements(specT).collect {
       case method if method.typeConstructor == methodT =>
         method.typeArgs match {
-          case List(name, params, _) => (unpackString(name), extractRecord(params))
-          case _                     => abort(s"unexpected method definition $method")
+          case List(name, params) => (unpackString(name), extractRecord(params))
+          case _                  => abort(s"unexpected method definition $method")
         }
     }
     val methodTypeParams: Map[String, List[Type]] = hlistElements(specT).collect {
       case method if method.typeConstructor == methodT =>
         method.typeArgs match {
-          case List(name, params, errors) => (unpackString(name), List(name, params, errors))
-          case _                          => abort(s"unexpected method definition $method")
+          case List(name, params) => (unpackString(name), List(name, params))
+          case _                  => abort(s"unexpected method definition $method")
         }
     }.toMap
 
@@ -112,17 +112,28 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
             val paramGens = MethodT.paramGens(methodT)
             for {
               startTime <- $syncF.delay(System.nanoTime)
-              result <- $invocation
-              endTime <- $syncF.delay(System.nanoTime)
-            } yield FuncInvocation(
+              resp <- $invocation.flatMap(okResp =>
+                        $syncF.delay(System.nanoTime).map(endTime =>
+                          MethodResp.Ok(
+                            result = okResp.toString,
+                            timestamp = endTime
+                          )))
+                        .handleErrorWith(error =>
+                        $syncF.delay(System.nanoTime).map(endTime =>
+                           MethodResp.Fail(
+                            error = error,
+                            timestamp = endTime
+                        )))
+            } yield TestLog(
+                      call = MethodCall(
                         methodName = ${q"$mName"},
                         paramSeeds = seeds,
-                        showParams = showParams.toList.map{case (k, v) => k + "=" + v}.mkString(", "),
-                        showResult = result.toString,
-                        start = startTime,
-                        end = endTime)
+                        params = showParams.toList.map{case (k, v) => k + "=" + v}.mkString(", "),
+                        timestamp = startTime
+                      ),
+                      resp = resp)
           """
-      } :+ cq"""_ => $syncF.pure(FuncInvocation("Unknown method", Map.empty, "", "", 0L, 0L)) """
+      } :+ cq"""_ => $syncF.pure(TestLog(MethodCall("Unknown method", Map.empty, "", 0L), MethodResp.Ok("",0L))) """
 
     val invokeTree  = q"""
       import lotos.model._
@@ -135,11 +146,11 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
         private val impl = SpecT.construct($spec)
 
         def copy: Invoke[$FT] = this
-        def invoke(method: String): ${appliedType(FT, typeOf[FuncInvocation])} =
+        def invoke(method: String): ${appliedType(FT, typeOf[TestLog])} =
           method match {
               case ..${methodMatch(withSeeds = false)}
           }
-        def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[FuncInvocation])} =
+        def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[TestLog])} =
           method match {
             case ..${methodMatch(withSeeds = true)}
           }

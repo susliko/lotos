@@ -4,7 +4,7 @@ import lotos.model.{MethodT, SpecT}
 import shapeless.HNil
 
 package object syntax {
-  def method[name <: String with Singleton](name: name): MethodT[name, HNil, HNil] =
+  def method[name <: String with Singleton](name: name): MethodT[name, HNil] =
     new MethodT(name = name, paramGens = Map.empty)
 
   def spec[I](construct: => I): SpecT[I, HNil] =

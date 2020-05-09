@@ -4,18 +4,18 @@ import cats.Functor
 import cats.effect.Sync
 import cats.implicits._
 import lotos.internal.deepcopy._
-import lotos.model.{FuncInvocation, LogEvent}
+import lotos.model.TestLog
 
 import scala.collection.immutable.ArraySeq
 
 object lts {
   sealed trait CheckResult
 
-  case class CheckSuccess(linearized: ArraySeq[LogEvent]) extends CheckResult
-  case object CheckFailure                                extends CheckResult
+  case class CheckSuccess(linearized: ArraySeq[TestLog]) extends CheckResult
+  case object CheckFailure                               extends CheckResult
 
   // Check for the sequential consistency compliance
-  def sequentially[F[_]](spec: Invoke[F], logs: List[List[FuncInvocation]])(implicit F: Sync[F]): F[CheckResult] = {
+  def sequentially[F[_]](spec: Invoke[F], logs: List[List[TestLog]])(implicit F: Sync[F]): F[CheckResult] = {
 
     val history      = ArraySeq.from(logs).map(ArraySeq.from)
     val eventsCounts = history.map(_.size)
@@ -31,7 +31,7 @@ object lts {
   }
 
   // Check for the linearizability compilance
-  def linearizable[F[_]](spec: Invoke[F], logs: List[List[FuncInvocation]])(implicit F: Sync[F]): F[CheckResult] = {
+  def linearizable[F[_]](spec: Invoke[F], logs: List[List[TestLog]])(implicit F: Sync[F]): F[CheckResult] = {
     val history      = ArraySeq.from(logs.map(ArraySeq.from))
     val eventsCounts = history.map(_.size)
     val eventsTotal  = eventsCounts.sum
@@ -47,8 +47,8 @@ object lts {
 
   private def go[F[_]: Sync](spec: Invoke[F],
                              candidates: List[(Int, Int)],
-                             explanation: ArraySeq[FuncInvocation],
-                             history: ArraySeq[ArraySeq[FuncInvocation]],
+                             explanation: ArraySeq[TestLog],
+                             history: ArraySeq[ArraySeq[TestLog]],
                              eventsCounts: ArraySeq[Int],
                              eventsTotal: Long,
                              linearizability: Boolean): F[CheckResult] = {
@@ -56,8 +56,11 @@ object lts {
       (CheckSuccess(explanation): CheckResult).pure[F]
     } else {
       val filteredCandidates = if (linearizability) {
-        val maxEnding = candidates.map { case (threadId, order) => history(threadId)(order) }.minBy(_.end).end
-        candidates.zipWithIndex.filter { case ((threadId, order), _) => history(threadId)(order).start < maxEnding }
+        val maxEnding =
+          candidates.map { case (threadId, order) => history(threadId)(order) }.minBy(_.resp.timestamp).resp.timestamp
+        candidates.zipWithIndex.filter {
+          case ((threadId, order), _) => history(threadId)(order).call.timestamp < maxEnding
+        }
       } else candidates.zipWithIndex
       filteredCandidates
         .map {
@@ -90,6 +93,8 @@ object lts {
     }
   }
 
-  private def validate[F[_]: Functor](spec: Invoke[F], event: LogEvent): F[Boolean] =
-    spec.invokeWithSeeds(event.methodName, event.paramSeeds).map(specEvent => LogEvent.catsEq.eqv(specEvent, event))
+  private def validate[F[_]: Functor](spec: Invoke[F], event: TestLog): F[Boolean] =
+    spec
+      .invokeWithSeeds(event.call.methodName, event.call.paramSeeds)
+      .map(specEvent => TestLog.catsEq.eqv(specEvent, event))
 }

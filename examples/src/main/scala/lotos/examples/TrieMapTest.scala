@@ -11,8 +11,8 @@ import scala.collection.concurrent.TrieMap
 object TrieMapTest extends IOApp {
   val trieMapSpec =
     spec(new TrieMap[Int, String])
-      .withMethod(method("put").param("key")(Gen.intGen(5)).param("value")(Gen.stringGen(1)))
-      .withMethod(method("get").param("k")(Gen.intGen(5)))
+      .withMethod(method("put").param("key")(Gen.int(5)).param("value")(Gen.string(1)))
+      .withMethod(method("get").param("k")(Gen.int(5)))
 
   val cfg = TestConfig(parallelism = 5, scenarioLength = 4, scenarioRepetition = 100, scenarioCount = 10)
 

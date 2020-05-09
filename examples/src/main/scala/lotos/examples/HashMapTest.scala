@@ -9,15 +9,15 @@ import java.{util => ju}
 class UnsafeHashMap extends Serializable {
   val underlying                                   = new ju.HashMap[Int, String]
   def put(key: Int, value: String): Option[String] = Option(underlying.put(key, value))
-  def get(key: Int): String = Option(underlying.get(key)).getOrElse(throw new NoSuchElementException)
+  def get(key: Int): String                        = Option(underlying.get(key)).getOrElse(throw new NoSuchElementException)
 }
 
 /*_*/
 object HashMapTest extends IOApp {
   val hashMapSpec =
     spec(new UnsafeHashMap)
-      .withMethod(method("put").param("key")(Gen.intGen(1)).param("value")(Gen.stringGen(1)))
-      .withMethod(method("get").param("key")(Gen.intGen(1)))
+      .withMethod(method("put").param("key")(Gen.int(1)).param("value")(Gen.string(1)))
+      .withMethod(method("get").param("key")(Gen.int(1)))
 
   val cfg = TestConfig(parallelism = 2, scenarioLength = 2, scenarioRepetition = 20, scenarioCount = 5)
 
