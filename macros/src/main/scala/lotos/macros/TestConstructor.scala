@@ -1,6 +1,6 @@
 package lotos.macros
 
-import cats.effect.{Concurrent, ContextShift, IO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, Timer}
 import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.traverse._
@@ -9,7 +9,6 @@ import lotos.internal.testing.Invoke
 import lotos.model.TestResult
 import shapeless.{HList, HNil}
 
-import scala.reflect.NameTransformer
 import scala.reflect.macros.blackbox
 
 class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
@@ -21,8 +20,8 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       spec: c.Expr[SpecT[Impl, Methods]],
       cfg: c.Expr[TestConfig],
       consistency: c.Expr[Consistency]
-  )(cs: c.Expr[ContextShift[F]])(F: c.Expr[Concurrent[F]]): c.Expr[F[TestResult]] = {
-    val invoke = constructInvoke[F, Impl, Methods](spec)(F)
+  )(cs: c.Expr[ContextShift[F]])(F: c.Expr[Concurrent[F]], timer: c.Expr[Timer[F]]): c.Expr[F[TestResult]] = {
+    val invoke = constructInvoke[F, Impl, Methods](spec)(F, timer)
 
     val testRunTree = q"lotos.testing.LotosTest.run($cfg, $invoke, $consistency)($cs)"
     val checkedTree = typeCheckOrAbort(testRunTree)
@@ -33,8 +32,8 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
       spec: c.Expr[SpecT[Impl, Methods]],
       cfg: c.Expr[TestConfig],
       consistency: c.Expr[Consistency]
-  ): c.Expr[IO[TestResult]] = {
-    val invoke      = constructInvoke[IO, Impl, Methods](spec)(c.Expr(q"cats.effect.IO.ioEffect"))
+  )(timer: c.Expr[Timer[IO]]): c.Expr[IO[TestResult]] = {
+    val invoke      = constructInvoke[IO, Impl, Methods](spec)(c.Expr(q"cats.effect.IO.ioEffect"), timer)
     val testRunTree = q"""
       import cats.effect.{ContextShift, Resource}
       import scala.concurrent.ExecutionContext
@@ -52,7 +51,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
 
   private def constructInvoke[F[_]: WTTF, Impl: WeakTypeTag, Methods <: HList: WeakTypeTag](
       spec: c.Expr[SpecT[Impl, Methods]],
-  )(syncF: c.Expr[Sync[F]]): c.Expr[Invoke[F]] = {
+  )(concF: c.Expr[Concurrent[F]], timerF: c.Expr[Timer[F]]): c.Expr[Invoke[F]] = {
     val FT      = weakTypeOf[F[Unit]].typeConstructor
     val methodT = weakTypeOf[MethodT[Unit, HNil]].typeConstructor
 
@@ -60,13 +59,13 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
     val specT = weakTypeOf[Methods]
 
     val implMethods = extractMethods(implT).toMap
-    val specMethods: List[(String, NList[Type])] = hlistElements(specT).collect {
+    val specMethods: Vector[(String, NList[Type])] = hlistElements(specT).collect {
       case method if method.typeConstructor == methodT =>
         method.typeArgs match {
           case List(name, params) => (unpackString(name), extractRecord(params))
           case _                  => abort(s"unexpected method definition $method")
         }
-    }
+    }.toVector
     val methodTypeParams: Map[String, List[Type]] = hlistElements(specT).collect {
       case method if method.typeConstructor == methodT =>
         method.typeArgs match {
@@ -90,11 +89,6 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
                param
              }"""
           }
-          val invocation =
-            if (paramList.isEmpty)
-              q"$syncF.delay(impl.${TermName(mName)}.toString)"
-            else
-              q"$syncF.delay(impl.${TermName(mName)}(..$paramList).toString)"
 
           val seeds =
             if (withSeeds) q""
@@ -103,6 +97,39 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
                 case (pName, _) => q"$pName -> random.nextLong()"
               }})"""
 
+          val methodInvoke =
+            if (paramList.isEmpty)
+              q"$concF.delay(impl.${TermName(mName)}.toString)"
+            else
+              q"$concF.delay(impl.${TermName(mName)}(..$paramList).toString)"
+
+          val invokeWithTime =
+            q"""
+            $methodInvoke.flatMap(okResp =>
+              currentTime.map(endTime =>
+                MethodResp.Ok(
+                  result = okResp.toString,
+                  timestamp = endTime
+                )))
+              .handleErrorWith(error =>
+              currentTime.map(endTime =>
+                MethodResp.Fail(
+                  error = error,
+                  timestamp = endTime
+              )))
+             """
+          val invocation =
+            if (withSeeds) invokeWithTime
+            else
+          q"""
+              Concurrent.timeoutTo(
+                $invokeWithTime,
+                timeout,
+                currentTime.map(endTime =>
+                  MethodResp.Timeout(
+                    timestamp = endTime
+                )))
+             """
           cq"""${q"$mName"} =>
             $seeds
             var showParams: Map[String, String] = Map.empty
@@ -110,20 +137,10 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
                 SpecT.methods($spec)(method)
                      .asInstanceOf[MethodT[..${methodTypeParams(mName)}]]
             val paramGens = MethodT.paramGens(methodT)
+            val currentTime = $timerF.clock.monotonic(NANOSECONDS)
             for {
-              startTime <- $syncF.delay(System.nanoTime)
-              resp <- $invocation.flatMap(okResp =>
-                        $syncF.delay(System.nanoTime).map(endTime =>
-                          MethodResp.Ok(
-                            result = okResp.toString,
-                            timestamp = endTime
-                          )))
-                        .handleErrorWith(error =>
-                        $syncF.delay(System.nanoTime).map(endTime =>
-                           MethodResp.Fail(
-                            error = error,
-                            timestamp = endTime
-                        )))
+              startTime <- currentTime
+              resp <- $invocation
             } yield TestLog(
                       call = MethodCall(
                         methodName = ${q"$mName"},
@@ -133,28 +150,31 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
                       ),
                       resp = resp)
           """
-      } :+ cq"""_ => $syncF.pure(TestLog(MethodCall("Unknown method", Map.empty, "", 0L), MethodResp.Ok("",0L))) """
+      } :+ cq"""_ => $concF.pure(TestLog(MethodCall("Unknown method", Map.empty, "", 0L), MethodResp.Ok("",0L))) """
 
     val invokeTree  = q"""
       import lotos.model._
 
       import lotos.internal.testing._
       import scala.util.Random
-
+      import scala.concurrent.duration._
+      import cats.effect.Concurrent 
+      
       new Invoke[$FT] {
         private val random = new Random(System.currentTimeMillis())
         private val impl = SpecT.construct($spec)
 
         def copy: Invoke[$FT] = this
-        def invoke(method: String): ${appliedType(FT, typeOf[TestLog])} =
+        def invoke(method: String, timeout: FiniteDuration): ${appliedType(FT, typeOf[TestLog])} =
           method match {
               case ..${methodMatch(withSeeds = false)}
           }
-        def invokeWithSeeds(method: String, seeds: Map[String, Long]): ${appliedType(FT, typeOf[TestLog])} =
+        def invokeWithSeeds(method: String, 
+                            seeds: Map[String, Long]): ${appliedType(FT, typeOf[TestLog])} =
           method match {
             case ..${methodMatch(withSeeds = true)}
           }
-        def methods: List[String] = ${specMethods.map(_._1)}
+        def methods: Vector[String] = ${specMethods.map(_._1)}
       }
      """
     val checkedTree = typeCheckOrAbort(invokeTree)
@@ -162,7 +182,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
   }
 
   private def checkSpecOrAbort(
-      specMethods: List[(String, List[(String, Type)])],
+      specMethods: Vector[(String, List[(String, Type)])],
       implMethods: Map[String, MethodDecl[Type]]
   ): Unit = {
     specMethods.foreach {

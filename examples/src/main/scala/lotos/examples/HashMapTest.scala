@@ -6,10 +6,15 @@ import lotos.testing.LotosTest
 import lotos.testing.syntax.{method, spec}
 import java.{util => ju}
 
+import scala.concurrent.duration._
+
 class UnsafeHashMap extends Serializable {
   val underlying                                   = new ju.HashMap[Int, String]
   def put(key: Int, value: String): Option[String] = Option(underlying.put(key, value))
-  def get(key: Int): String                        = Option(underlying.get(key)).getOrElse(throw new NoSuchElementException)
+  def get(key: Int): String = {
+    Thread.sleep(10000)
+    Option(underlying.get(key)).getOrElse(throw new NoSuchElementException)
+  }
 }
 
 /*_*/
@@ -19,7 +24,11 @@ object HashMapTest extends IOApp {
       .withMethod(method("put").param("key")(Gen.int(1)).param("value")(Gen.string(1)))
       .withMethod(method("get").param("key")(Gen.int(1)))
 
-  val cfg = TestConfig(parallelism = 2, scenarioLength = 2, scenarioRepetition = 20, scenarioCount = 5)
+  val cfg = TestConfig(parallelism = 2,
+                       scenarioLength = 2,
+                       scenarioRepetition = 20,
+                       scenarioCount = 5,
+                       operationTimeout = 1.second)
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
