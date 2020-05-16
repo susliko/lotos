@@ -181,6 +181,8 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
     c.Expr(checkedTree)
   }
 
+  type SEither[A] = Either[String, A]
+
   private def checkSpecOrAbort(
       specMethods: Vector[(String, List[(String, Type)])],
       implMethods: Map[String, MethodDecl[Type]]
@@ -192,7 +194,7 @@ class TestConstructor(val c: blackbox.Context) extends ShapelessMacros {
           (implArgLists, _) <- implMethods
                                 .get(name)
                                 .toRight(s"specified method `$name` does not exist in the implementation")
-          _ <- implArgLists.flatten.traverse {
+          _ <- implArgLists.flatten.traverse[SEither, (String, Type)] {
                 case (implArgName, implArgType) =>
                   for {
                     specArgType <- specArgsMap

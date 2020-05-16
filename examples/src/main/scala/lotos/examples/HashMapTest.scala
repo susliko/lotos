@@ -34,5 +34,4 @@ object HashMapTest extends IOApp {
     for {
       _ <- LotosTest.forSpec(hashMapSpec, cfg, Consistency.linearizable)
     } yield ExitCode.Success
-
 }
