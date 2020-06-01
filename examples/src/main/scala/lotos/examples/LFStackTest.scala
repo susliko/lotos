@@ -17,11 +17,10 @@ class LFStack[T] extends Serializable {
   def push(item: T): Unit = {
     var oldHead: Node[T] = null
     var newHead          = Node(item)
-//    do {
-    oldHead = stack.get();
-    newHead = newHead.copy(next = oldHead)
-    stack.set(newHead)
-//    } while (!stack.compareAndSet(oldHead, newHead))
+    do {
+      oldHead = stack.get();
+      newHead = newHead.copy(next = oldHead)
+    } while (!stack.compareAndSet(oldHead, newHead))
   }
 
   def pop: Option[T] = {
@@ -39,24 +38,20 @@ class LFStack[T] extends Serializable {
 }
 
 object LFStackTest extends IOApp {
-  val stackSpec = spec(new LFStack[Int])
-    .withMethod(method("push").param("item")(Gen.int(2)))
-    .withMethod(method("pop"))
+  val stackSpec =
+    spec(new LFStack[Int])
+      .withMethod(method("push").param("item")(Gen.int(10)))
+      .withMethod(method("pop"))
 
   val cfg = TestConfig(
     parallelism = 2,
-    scenarioLength = 5,
+    scenarioLength = 10,
     scenarioRepetition = 100,
-    scenarioCount = 100,
-    operationTimeout = 1.second
+    scenarioCount = 50
   )
 
   def run(args: List[String]): IO[ExitCode] =
     for {
-      _ <- LotosTest.forSpec(
-            stackSpec,
-            cfg,
-            Consistency.linearizable
-          )
+      _ <- LotosTest.forSpec(stackSpec, cfg, Consistency.linearizable)
     } yield ExitCode.Success
 }
