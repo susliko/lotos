@@ -50,33 +50,3 @@ object MethodCall {
   }
 }
 
-object PrintLogs {
-  def pretty(logs: Vector[Vector[TestLog]], scenarioLength: Int): String = {
-    val sortedTimes = logs
-      .flatMap(_.flatMap(event => List(event.call.timestamp, event.resp.timestamp)))
-      .sorted
-      .zipWithIndex
-
-    val maxTime = sortedTimes.length
-
-    val timesMapping =
-      sortedTimes.toMap
-        .mapValues(_.toLong)
-
-    val maxLogLength = logs.flatMap(_.map(_.show(maxTime, maxTime).length)).max
-    val emptyLog = " " * (maxLogLength + 2)
-    logs
-      .map { column =>
-        column
-          .map(event => {
-            val str =
-              event.show(timesMapping(event.call.timestamp), timesMapping(event.resp.timestamp))
-            s""" $str${" " * (maxLogLength - str.length)} """
-          })
-      }
-      .fold(Vector.fill(scenarioLength)("")) {
-        case (l1, l2) => l1.zipAll(l2, emptyLog, emptyLog).map{case (s1, s2) => s"$s1|$s2"}
-      }
-      .mkString("\n")
-  }
-}

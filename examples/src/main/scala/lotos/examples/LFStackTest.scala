@@ -47,7 +47,7 @@ object LFStackTest extends IOApp {
     parallelism = 2,
     scenarioLength = 10,
     scenarioRepetition = 100,
-    scenarioCount = 50
+    scenarioCount = 10
   )
 
   def run(args: List[String]): IO[ExitCode] =
