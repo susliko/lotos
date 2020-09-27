@@ -1,15 +1,15 @@
 ThisBuild / name := "lotos"
-ThisBuild / scalaVersion := "2.13.2"
+ThisBuild / scalaVersion := "2.13.3"
 
-lazy val scalaVersions = List("2.12.11", "2.13.2")
+lazy val scalaVersions = List("2.12.12", "2.13.3")
 
 lazy val commonDependencies =
   libraryDependencies ++= List(
     "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-    "org.typelevel"  %% "cats-core"    % "2.1.0",
-    "org.typelevel"  %% "cats-effect"  % "2.1.1",
+    "org.typelevel"  %% "cats-core"    % "2.2.0",
+    "org.typelevel"  %% "cats-effect"  % "2.2.0",
     "com.chuusai"    %% "shapeless"    % "2.3.3",
-    "org.scalatest"  %% "scalatest"    % "3.1.1" % "test",
+    "org.scalatest"  %% "scalatest"    % "3.2.2" % Test,
   )
 
 def configure(id: String)(project: Project): Project =
